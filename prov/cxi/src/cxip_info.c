@@ -620,7 +620,7 @@ struct cxip_environment cxip_env = {
 	.rx_match_mode = CXIP_PTLTE_DEFAULT_MODE,
 	.rdzv_threshold = CXIP_RDZV_THRESHOLD,
 	.rdzv_get_min = 2049, /* Avoid single packet Gets */
-	.rdzv_eager_size = CXIP_RDZV_THRESHOLD,
+	.rdzv_eager_size = 2048,
 	.rdzv_aligned_sw_rget = 1,
 	.rnr_max_timeout_us = CXIP_RNR_TIMEOUT_US,
 	.disable_non_inject_msg_idc = 0,
@@ -794,10 +794,10 @@ static void cxip_env_init(void)
 		CXIP_INFO("Could not enable FI_HMEM_ROCR_USE_DMABUF ret:%d %s\n",
 			  ret, fi_strerror(errno));
 
-	/* Disable cuda DMABUF by default - honors the env if already set */
-	ret = setenv("FI_HMEM_CUDA_USE_DMABUF", "0", 0);
+	/* Use cuda DMABUF by default - honors the env if already set */
+	ret = setenv("FI_HMEM_CUDA_USE_DMABUF", "1", 0);
 	if (ret)
-		CXIP_INFO("Could not disable FI_HMEM_CUDA_USE_DMABUF ret:%d %s\n",
+		CXIP_INFO("Could not enable FI_HMEM_CUDA_USE_DMABUF ret:%d %s\n",
 			  ret, fi_strerror(errno));
 
 	fi_param_define(&cxip_prov, "ats_mlock_mode", FI_PARAM_STRING,
@@ -1047,7 +1047,7 @@ static void cxip_env_init(void)
 	fi_param_get_size_t(&cxip_prov, "req_buf_max_cached",
 			    &cxip_env.req_buf_max_cached);
 
-	if (cxip_software_pte_allowed()) {
+	if (cxip_software_pte_allowed(cxip_env.rx_match_mode)) {
 		min_free = CXIP_REQ_BUF_HEADER_MAX_SIZE +
 			cxip_env.rdzv_threshold + cxip_env.rdzv_get_min;
 

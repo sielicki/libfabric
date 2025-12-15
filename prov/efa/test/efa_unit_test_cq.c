@@ -107,17 +107,14 @@ static void test_rdm_cq_read_bad_send_status(struct efa_resource *resource,
 	assert_non_null(peer);
 	peer->host_id = peer_host_id;
 
-	g_efa_unit_test_mocks.efa_qp_wr_start = &efa_mock_efa_qp_wr_start_no_op;
-	/* this mock will save the send work request (wr) in a global list */
-	g_efa_unit_test_mocks.efa_qp_wr_send = &efa_mock_efa_qp_wr_send_save_wr;
-	g_efa_unit_test_mocks.efa_qp_wr_set_sge_list = &efa_mock_efa_qp_wr_set_sge_list_no_op;
-	g_efa_unit_test_mocks.efa_qp_wr_set_ud_addr = &efa_mock_efa_qp_wr_set_ud_addr_no_op;
-	g_efa_unit_test_mocks.efa_qp_wr_complete = &efa_mock_efa_qp_wr_complete_no_op;
+	/* Mock the general QP post send function to save work request IDs */
+	g_efa_unit_test_mocks.efa_qp_post_send = &efa_mock_efa_qp_post_send_return_mock;
+	will_return(efa_mock_efa_qp_post_send_return_mock, 0);
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
 
 	err = fi_send(resource->ep, send_buff.buff, send_buff.size, fi_mr_desc(send_buff.mr), addr, NULL /* context */);
 	assert_int_equal(err, 0);
-	/* fi_send() called efa_mock_efa_qp_wr_send_save_wr(), which saved one send_wr in g_ibv_submitted_wr_id_vec */
+	/* The consolidated post function should have saved the work request ID */
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
 
 	/* this mock will set ibv_cq_ex->wr_id to the wr_id f the head of global send_wr,
@@ -480,7 +477,7 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 #if HAVE_CAPS_UNSOLICITED_WRITE_RECV
 	if (ibv_cq->unsolicited_write_recv_enabled) {
 		g_efa_unit_test_mocks.efa_ibv_cq_wc_is_unsolicited = &efa_mock_efa_ibv_cq_wc_is_unsolicited_return_mock;
-		will_return(efa_mock_efa_ibv_cq_wc_is_unsolicited_return_mock, false);
+		will_return_always(efa_mock_efa_ibv_cq_wc_is_unsolicited_return_mock, false);
 	}
 #endif
 
@@ -559,7 +556,7 @@ void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_impl(struct efa_resource 
 	if (use_unsolicited_recv) {
 		g_efa_unit_test_mocks.efa_ibv_cq_wc_is_unsolicited = &efa_mock_efa_ibv_cq_wc_is_unsolicited_return_mock;
 		ibv_cq->unsolicited_write_recv_enabled = true;
-		will_return(efa_mock_efa_ibv_cq_wc_is_unsolicited_return_mock, true);
+		will_return_always(efa_mock_efa_ibv_cq_wc_is_unsolicited_return_mock, true);
 		ibv_cq->ibv_cq_ex->wr_id = 0;
 	} else {
 		/*
@@ -1442,7 +1439,7 @@ void test_efa_cq_recv_rdma_with_imm_failure(struct efa_resource **state)
  */
 static void test_efa_cq_data_path_direct_status(
 	struct efa_resource **state, uint32_t vendor_part_id,
-	bool data_path_direct_enabled, enum fi_wait_obj wait_obj)
+	bool data_path_direct_enabled, enum fi_wait_obj wait_obj, char *fabric_name)
 {
 	struct efa_resource *resource = *state;
 	struct efa_cq *efa_cq;
@@ -1455,7 +1452,7 @@ static void test_efa_cq_data_path_direct_status(
 	bool use_data_path_direct_orig = efa_env.use_data_path_direct;
 	int ret;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, fabric_name);
 
 	/* mock the vendor part id */
 	g_efa_selected_device_list[0].ibv_attr.vendor_part_id = vendor_part_id;
@@ -1509,7 +1506,7 @@ void test_efa_cq_data_path_direct_disabled_by_env(struct efa_resource **state)
  */
 void test_efa_cq_data_path_direct_disabled_with_old_device(struct efa_resource **state)
 {
-	test_efa_cq_data_path_direct_status(state, 0xefa0, false, FI_WAIT_NONE);
+	test_efa_cq_data_path_direct_status(state, 0xefa0, false, FI_WAIT_NONE, EFA_DIRECT_FABRIC_NAME);
 }
 
 /**
@@ -1520,7 +1517,7 @@ void test_efa_cq_data_path_direct_disabled_with_old_device(struct efa_resource *
  */
 void test_efa_cq_data_path_direct_enabled_with_new_device(struct efa_resource **state)
 {
-	test_efa_cq_data_path_direct_status(state, 0xefa1, true, FI_WAIT_NONE);
+	test_efa_cq_data_path_direct_status(state, 0xefa1, true, FI_WAIT_NONE, EFA_DIRECT_FABRIC_NAME);
 }
 
 /**
@@ -1533,10 +1530,32 @@ void test_efa_cq_data_path_direct_enabled_with_new_device(struct efa_resource **
 void test_efa_cq_data_path_direct_with_wait_obj(struct efa_resource **state)
 {
 #if HAVE_EFADV_CQ_ATTR_DB
-	test_efa_cq_data_path_direct_status(state, 0xefa1, true, FI_WAIT_UNSPEC);
+	test_efa_cq_data_path_direct_status(state, 0xefa1, true, FI_WAIT_UNSPEC, EFA_DIRECT_FABRIC_NAME);
 #else
-	test_efa_cq_data_path_direct_status(state, 0xefa1, false, FI_WAIT_UNSPEC);
+	test_efa_cq_data_path_direct_status(state, 0xefa1, false, FI_WAIT_UNSPEC, EFA_DIRECT_FABRIC_NAME);
 #endif
+}
+
+/**
+ * @brief Make sure data_path_direct is disabled when device is old
+ * This test is against efa fabric
+ *
+ * @param state unit test resources
+ */
+void test_efa_rdm_cq_data_path_direct_disabled_with_old_device(struct efa_resource **state)
+{
+	test_efa_cq_data_path_direct_status(state, 0xefa0, false, FI_WAIT_NONE, EFA_FABRIC_NAME);
+}
+
+/**
+ * @brief Make sure data_path_direct is enabled when device is new enough
+ * This test is against efa fabric
+ *
+ * @param state unit test resources
+ */
+void test_efa_rdm_cq_data_path_direct_enabled_with_new_device(struct efa_resource **state)
+{
+	test_efa_cq_data_path_direct_status(state, 0xefa1, true, FI_WAIT_NONE, EFA_FABRIC_NAME);
 }
 
 #else
@@ -1556,44 +1575,35 @@ void test_efa_cq_data_path_direct_disabled_by_env(struct efa_resource **state)
 void test_efa_cq_data_path_direct_disabled_with_old_device(struct efa_resource **state)
 {
 	/* cq direct should always be disabled */
-	test_efa_cq_data_path_direct_status(state, 0xefa0, false, FI_WAIT_NONE);
+	test_efa_cq_data_path_direct_status(state, 0xefa0, false, FI_WAIT_NONE, EFA_DIRECT_FABRIC_NAME);
 }
 
 void test_efa_cq_data_path_direct_enabled_with_new_device(struct efa_resource **state)
 {
 	/* cq direct should always be disabled */
-	test_efa_cq_data_path_direct_status(state, 0xefa1, false, FI_WAIT_NONE);
+	test_efa_cq_data_path_direct_status(state, 0xefa1, false, FI_WAIT_NONE, EFA_DIRECT_FABRIC_NAME);
 }
 
 void test_efa_cq_data_path_direct_with_wait_obj(struct efa_resource **state)
 {
 	/* cq direct should always be disabled */
 #if HAVE_EFADV_CQ_ATTR_DB
-	test_efa_cq_data_path_direct_status(state, 0xefa1, false, FI_WAIT_UNSPEC);
+	test_efa_cq_data_path_direct_status(state, 0xefa1, false, FI_WAIT_UNSPEC, EFA_DIRECT_FABRIC_NAME);
 #else
-	test_efa_cq_data_path_direct_status(state, 0xefa1, false, FI_WAIT_UNSPEC);
+	test_efa_cq_data_path_direct_status(state, 0xefa1, false, FI_WAIT_UNSPEC, EFA_DIRECT_FABRIC_NAME);
 #endif
 }
 
-#endif /* HAVE_EFA_DIRECT_CQ */
-
-/**
- * @brief Test cq data_path_direct status for efa-rdm
- * This test is against efa fabric
- * Currently, data_path_direct should always be disabled by efa-rdm.
- * @param state pointer of efa_resource
- */
-void test_efa_rdm_cq_data_path_direct_disabled(struct efa_resource **state)
+void test_efa_rdm_cq_data_path_direct_disabled_with_old_device(struct efa_resource **state)
 {
-	struct efa_resource *resource = *state;
-	struct efa_cq *efa_cq;
-
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
-
-	efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid);
-
-	assert_false(efa_cq->ibv_cq.data_path_direct_enabled);
+	test_efa_cq_data_path_direct_status(state, 0xefa0, false, FI_WAIT_NONE, EFA_FABRIC_NAME);
 }
+
+void test_efa_rdm_cq_data_path_direct_enabled_with_new_device(struct efa_resource **state)
+{
+	test_efa_cq_data_path_direct_status(state, 0xefa1, false, FI_WAIT_NONE, EFA_FABRIC_NAME);
+}
+#endif /* HAVE_EFA_DIRECT_CQ */
 
 /**
  * @brief test efa_cq_trywait() returns -FI_EINVAL when no completion channel is present

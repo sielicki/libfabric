@@ -99,6 +99,8 @@ void efa_rdm_pke_handle_handshake_recv(struct efa_rdm_pke *pkt_entry)
 	peer = pkt_entry->peer;
 	assert(peer);
 
+	efa_rdm_tracepoint(handshake_recv_completion, (size_t) pkt_entry);
+
 	EFA_INFO(FI_LOG_CQ,
 		 "HANDSHAKE received from peer with explicit fi_addr %" PRIu64
 		 " implicit fi_addr %" PRIu64 "\n",
@@ -576,6 +578,14 @@ void efa_rdm_pke_handle_rma_completion(struct efa_rdm_pke *context_pkt_entry)
 	struct efa_rdm_rma_context_pkt *rma_context_pkt;
 
 	assert(efa_rdm_pke_get_base_hdr(context_pkt_entry)->version == EFA_RDM_PROTOCOL_VERSION);
+
+	/* pkt_entry->peer can be NULL for a local read operation, which shouldn't be ignored. */
+	if (!context_pkt_entry->peer && !(context_pkt_entry->flags & EFA_RDM_PKE_LOCAL_READ)) {
+		EFA_WARN(FI_LOG_CQ, "ignoring rma completion of a packet to a removed peer.\n");
+		efa_rdm_ep_record_tx_op_completed(context_pkt_entry->ep, context_pkt_entry);
+		efa_rdm_pke_release_tx(context_pkt_entry);
+		return;
+	}
 
 	rma_context_pkt = (struct efa_rdm_rma_context_pkt *)context_pkt_entry->wiredata;
 

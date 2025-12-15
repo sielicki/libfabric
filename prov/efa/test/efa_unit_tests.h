@@ -139,7 +139,8 @@ void test_efa_rdm_ep_handshake_receive_valid_peer_host_id_and_do_not_send_local_
 void test_efa_rdm_ep_handshake_receive_without_peer_host_id_and_do_not_send_local_host_id();
 void test_efa_rdm_ep_getopt_undersized_optlen();
 void test_efa_rdm_ep_getopt_oversized_optlen();
-void test_efa_rdm_ep_pkt_pool_flags();
+void test_efa_rdm_ep_tx_pkt_pool_flags();
+void test_efa_rdm_ep_rx_pkt_pool_flags();
 void test_efa_rdm_ep_pkt_pool_page_alignment();
 void test_efa_rdm_ep_dc_atomic_queue_before_handshake();
 void test_efa_rdm_ep_dc_send_queue_before_handshake();
@@ -167,7 +168,6 @@ void test_efa_rdm_ep_post_handshake_error_handling_pke_exhaustion();
 void test_efa_rdm_ep_rx_refill_threshold_smaller_than_rx_size();
 void test_efa_rdm_ep_rx_refill_threshold_larger_than_rx_size();
 void test_efa_rdm_ep_support_unsolicited_write_recv();
-void test_efa_rdm_ep_rma_inconsistent_unsolicited_write_recv();
 void test_efa_rdm_ep_default_sizes();
 void test_dgram_cq_read_empty_cq();
 void test_ibv_cq_ex_read_empty_cq();
@@ -237,9 +237,11 @@ void test_efa_use_device_rdma_opt0();
 void test_efa_use_device_rdma_env1();
 void test_efa_use_device_rdma_env0();
 void test_efa_use_device_rdma_opt_old();
-void test_info_direct_rma_when_no_unsolicited_write_recv_and_rx_cq_data();
-void test_info_direct_rma_when_no_unsolicited_write_recv_and_no_rx_cq_data();
-void test_info_direct_rma_when_unsolicited_write_recv_on_and_no_rx_cq_data();
+void test_info_direct_null_hints_return_rma_and_rx_cq_data();
+void test_info_direct_rma_with_rx_cq_data_when_no_unsolicited_write_recv();
+void test_info_direct_rma_without_rx_cq_data_when_no_unsolicited_write_recv();
+void test_info_direct_no_rma_no_rx_cq_data_when_no_unsolicited_write_recv();
+void test_info_direct_rma_without_rx_cq_data_when_unsolicited_write_recv_supported();
 /* end efa_unit_test_info.c */
 
 void test_efa_srx_min_multi_recv_size();
@@ -368,7 +370,8 @@ void test_efa_cq_data_path_direct_disabled_by_env();
 void test_efa_cq_data_path_direct_disabled_with_old_device();
 void test_efa_cq_data_path_direct_enabled_with_new_device();
 void test_efa_cq_data_path_direct_with_wait_obj();
-void test_efa_rdm_cq_data_path_direct_disabled();
+void test_efa_rdm_cq_data_path_direct_disabled_with_old_device();
+void test_efa_rdm_cq_data_path_direct_enabled_with_new_device();
 void test_efa_cq_trywait_no_channel();
 void test_efa_cq_trywait_completions_available();
 void test_efa_cq_trywait_success();
@@ -400,11 +403,15 @@ void test_efa_ep_setopt_sizes();
 void test_efa_ep_bind_and_enable();
 void test_efa_ep_data_path_direct_equal_to_cq_data_path_direct_happy();
 void test_efa_ep_data_path_direct_equal_to_cq_data_path_direct_unhappy();
-void test_efa_rdm_ep_data_path_direct_disabled();
+void test_efa_rdm_ep_data_path_direct_equal_to_cq_data_path_direct_happy();
+void test_efa_rdm_ep_data_path_direct_equal_to_cq_data_path_direct_unhappy();
 void test_efa_ep_lock_type_no_op();
 void test_efa_ep_lock_type_mutex();
 void test_efa_rdm_ep_shm_ep_different_info();
 void test_efa_base_ep_disable_unsolicited_write_recv_with_rx_cq_data();
+void test_efa_rdm_ep_setopt_cq_flow_control();
+void test_efa_direct_ep_setopt_cq_flow_control_no_rx_cq_data();
+void test_efa_direct_ep_setopt_cq_flow_control_with_rx_cq_data();
 
 /* begin efa_unit_test_data_path_direct.c */
 void test_efa_data_path_direct_rdma_read_multiple_sge_fail();
@@ -422,6 +429,17 @@ void test_efa_rdm_mr_reg_host_memory_overlapping_buffers();
 void test_efa_rdm_mr_reg_cuda_memory();
 void test_efa_direct_mr_reg_no_gdrcopy();
 /* end efa_unit_test_mr.c */
+
+/* begin efa_unit_test_rdm_rma.c */
+void test_efa_rdm_rma_should_write_using_rdma_remote_cq_data_multiple_iovs_returns_false();
+void test_efa_rdm_rma_should_write_using_rdma_remote_cq_data_multiple_rma_iovs_returns_false();
+void test_efa_rdm_rma_should_write_using_rdma_use_device_rdma_false_returns_false();
+void test_efa_rdm_rma_should_write_using_rdma_peer_no_rdma_write_support_returns_false();
+void test_efa_rdm_rma_should_write_using_rdma_no_p2p_support_returns_false();
+void test_efa_rdm_rma_should_write_using_rdma_p2p_and_rdma_write_support_returns_true();
+void test_efa_rdm_rma_should_write_using_rdma_remote_cq_data_single_iovs_with_rdma_support();
+void test_efa_rdm_rma_should_write_using_rdma_unsolicited_write_recv_not_match();
+/* end efa_unit_test_rdm_rma.c */
 
 static inline
 int efa_unit_test_get_dlist_length(struct dlist_entry *head)

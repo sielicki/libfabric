@@ -14,12 +14,15 @@ memory_type_list_bi_dir = [
     pytest.param("cuda_to_cuda", marks=pytest.mark.cuda_memory),
     pytest.param("host_to_neuron", marks=pytest.mark.neuron_memory),
     pytest.param("neuron_to_neuron", marks=pytest.mark.neuron_memory),
+    pytest.param("host_to_rocr", marks=pytest.mark.rocr_memory),
+    pytest.param("rocr_to_rocr", marks=pytest.mark.rocr_memory),
 ]
 
 # Add more memory types that are useful for uni-directional tests.
 memory_type_list_all = memory_type_list_bi_dir + [
     pytest.param("cuda_to_host", marks=pytest.mark.cuda_memory),
     pytest.param("neuron_to_host", marks=pytest.mark.neuron_memory),
+    pytest.param("rocr_to_host", marks=pytest.mark.rocr_memory),
 ]
 
 @pytest.fixture(scope="module", params=memory_type_list_all)
@@ -59,7 +62,7 @@ def rma_bw_completion_semantic(cmdline_args, completion_semantic, rma_operation_
                                         "r:4048,4,4148",
                                         "r:8000,4,9000",
                                         "r:17000,4,18000",
-                                        "r:0,1024,1048576"])
+                                        "r:0,4096,1048576"])
 def message_size(request):
     return request.param
 

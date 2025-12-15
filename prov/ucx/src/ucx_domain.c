@@ -54,7 +54,8 @@ static int ucx_dom_control(struct fid *fid, int command, void *arg)
 	struct ucx_mr_pkey *pkey;
 	struct ucx_mr_rkey *rkey;
 	struct fi_mr_map_raw *map_raw;
-
+	struct dlist_entry *tmp;
+	
 	switch (command) {
 	case FI_MAP_RAW_MR:
 		map_raw = arg;
@@ -85,8 +86,8 @@ static int ucx_dom_control(struct fid *fid, int command, void *arg)
 		if (pkey->signature != FI_UCX_PKEY_SIGNATURE)
 			return -FI_EINVAL;
 
-		dlist_foreach_container(&pkey->rkey_list, struct ucx_mr_rkey,
-					rkey, entry) {
+		dlist_foreach_container_safe(&pkey->rkey_list, struct ucx_mr_rkey,
+					rkey, entry, tmp) {
 			FI_DBG(&ucx_prov,FI_LOG_MR,
 			       "UCX/RMA: removed key {%" PRIu64 ":%" PRIu64 "}\n",
 			       rkey->id.owner_addr, rkey->id.key);
@@ -185,8 +186,8 @@ static int ucx_mr_control(struct fid *fid, int command, void *arg)
 	memcpy(raw_attr->raw_key, tmp, tmp_size);
 	*raw_attr->key_size = tmp_size;
 	ucp_rkey_buffer_release(tmp);
+	*raw_attr->base_addr = ucx_mr->base_addr;
 
-	/* TODO: should (*raw_attr->base_addr) be set? unused for now. */
 	return FI_SUCCESS;
 }
 
@@ -286,6 +287,7 @@ static int ucx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		goto out;
 	}
 
+	ucx_mr->base_addr = (uint64_t)(uintptr_t) attr->mr_iov->iov_base;
 	mr->mr_fid.key = mr->key = key;
 	mr->mr_fid.mem_desc = (void *)(uintptr_t) key;
 

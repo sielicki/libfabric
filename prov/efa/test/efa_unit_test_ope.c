@@ -245,6 +245,8 @@ void test_efa_rdm_ope_post_write_0_byte(struct efa_resource **state)
 	struct efa_rdm_ope mock_txe;
 	size_t raw_addr_len = sizeof(raw_addr);
 	fi_addr_t addr;
+	uint64_t wr_id;
+	struct efa_rdm_pke *pkt_entry;
 	int ret, err;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
@@ -274,18 +276,23 @@ void test_efa_rdm_ope_post_write_0_byte(struct efa_resource **state)
 
 	mock_txe.ep = efa_rdm_ep;
 
-	g_efa_unit_test_mocks.efa_qp_wr_start = &efa_mock_efa_qp_wr_start_no_op;
-	g_efa_unit_test_mocks.efa_qp_wr_rdma_write = &efa_mock_efa_qp_wr_rdma_write_save_wr;
-	g_efa_unit_test_mocks.efa_qp_wr_set_sge_list = &efa_mock_efa_qp_wr_set_sge_list_no_op;
-	g_efa_unit_test_mocks.efa_qp_wr_set_ud_addr = &efa_mock_efa_qp_wr_set_ud_addr_no_op;
-	g_efa_unit_test_mocks.efa_qp_wr_complete = &efa_mock_efa_qp_wr_complete_no_op;
+	/* Mock general QP post write function to save work request IDs */
+	g_efa_unit_test_mocks.efa_qp_post_write = &efa_mock_efa_qp_post_write_return_mock;
+	will_return(efa_mock_efa_qp_post_write_return_mock, 0);
 
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
 	err = efa_rdm_ope_post_remote_write(&mock_txe);
 	assert_int_equal(err, 0);
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
 
-	efa_rdm_pke_release_tx((struct efa_rdm_pke *)g_ibv_submitted_wr_id_vec[0]);
+	wr_id = (uint64_t) g_ibv_submitted_wr_id_vec[0];
+
+	pkt_entry = (struct efa_rdm_pke *) wr_id;
+#if ENABLE_DEBUG
+	pkt_entry = efa_rdm_cq_get_pke_from_wr_id(wr_id);
+#endif
+
+	efa_rdm_pke_release_tx(pkt_entry);
 	mock_txe.ep->efa_outstanding_tx_ops = 0;
 	efa_unit_test_buff_destruct(&local_buff);
 }

@@ -73,6 +73,7 @@ void efa_rdm_pke_pool_mr_dereg_handler(struct ofi_bufpool_region *region)
  * @param chunk_cnt count of chunks in the pool
  * @param max_cnt maximal count of chunks
  * @param alignment memory alignment
+ * @param base_flags base flags for the pool
  * @param pkt_pool pkt pool
  * @return int 0 on success, a negative integer on failure
  */
@@ -81,6 +82,7 @@ int efa_rdm_ep_create_pke_pool(struct efa_rdm_ep *ep,
 			       size_t chunk_cnt,
 			       size_t max_cnt,
 			       size_t alignment,
+			       uint64_t base_flags,
 			       struct ofi_bufpool **pke_pool)
 {
 	/*
@@ -104,6 +106,10 @@ int efa_rdm_ep_create_pke_pool(struct efa_rdm_ep *ep,
 	uint64_t mr_flags = (efa_env.huge_page_setting == EFA_ENV_HUGE_PAGE_DISABLED)
 					? OFI_BUFPOOL_NONSHARED
 					: OFI_BUFPOOL_HUGEPAGES;
+	uint64_t flags = base_flags;
+
+	if (need_mr)
+		flags |= mr_flags;
 
 	struct ofi_bufpool_attr wiredata_attr = {
 		.size = sizeof(struct efa_rdm_pke) + ep->mtu_size,
@@ -114,13 +120,16 @@ int efa_rdm_ep_create_pke_pool(struct efa_rdm_ep *ep,
 		.free_fn = need_mr ? efa_rdm_pke_pool_mr_dereg_handler : NULL,
 		.init_fn = NULL,
 		.context = efa_rdm_ep_domain(ep),
-		.flags = need_mr ? mr_flags : 0,
+		.flags = flags,
 	};
 
 	return ofi_bufpool_create_attr(&wiredata_attr, pke_pool);
 }
 
 /** @brief initializes the various buffer pools of EFA RDM endpoint.
+ * Grow the pools to avoid memory allocations during the first communication
+ * that add latency overhead to the fast path. RX pools growth is delayed until
+ * the first fi_cq_read call in efa_rdm_ep_grow_rx_pools.
  *
  * called by efa_rdm_ep_open()
  *
@@ -131,6 +140,11 @@ int efa_rdm_ep_create_pke_pool(struct efa_rdm_ep *ep,
 int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 {
 	int ret;
+	uint64_t rx_pkt_pool_base_flags = OFI_BUFPOOL_NO_TRACK;
+
+#if ENABLE_DEBUG
+	rx_pkt_pool_base_flags &= ~OFI_BUFPOOL_NO_TRACK;
+#endif
 
 	ret = efa_rdm_ep_create_pke_pool(
 		ep,
@@ -138,7 +152,12 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 		efa_rdm_ep_get_tx_pool_size(ep),
 		efa_rdm_ep_get_tx_pool_size(ep), /* max count==chunk_cnt means pool is not allowed to grow */
 		EFA_RDM_BUFPOOL_ALIGNMENT,
+		0,
 		&ep->efa_tx_pkt_pool);
+	if (ret)
+		goto err_free;
+
+	ret = ofi_bufpool_grow(ep->efa_tx_pkt_pool);
 	if (ret)
 		goto err_free;
 
@@ -148,6 +167,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 		efa_rdm_ep_get_rx_pool_size(ep),
 		efa_rdm_ep_get_rx_pool_size(ep), /* max count==chunk_cnt means pool is not allowed to grow */
 		EFA_RDM_BUFPOOL_ALIGNMENT,
+		rx_pkt_pool_base_flags,
 		&ep->efa_rx_pkt_pool);
 	if (ret)
 		goto err_free;
@@ -157,7 +177,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 			EFA_RDM_BUFPOOL_ALIGNMENT,
 			ep->base_ep.info->rx_attr->size,
 			ep->base_ep.info->rx_attr->size, /* max count==chunk_cnt means pool is not allowed to grow */
-			0);
+			rx_pkt_pool_base_flags);
 	if (ret)
 		goto err_free;
 
@@ -168,6 +188,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 			efa_env.unexp_pool_chunk_size,
 			0, /* max count = 0, so pool is allowed to grow */
 			EFA_RDM_BUFPOOL_ALIGNMENT,
+			rx_pkt_pool_base_flags,
 			&ep->rx_unexp_pkt_pool);
 		if (ret)
 			goto err_free;
@@ -180,6 +201,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 			efa_env.ooo_pool_chunk_size,
 			0, /* max count = 0, so pool is allowed to grow */
 			EFA_RDM_BUFPOOL_ALIGNMENT,
+			0,
 			&ep->rx_ooo_pkt_pool);
 		if (ret)
 			goto err_free;
@@ -194,6 +216,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 			efa_env.readcopy_pool_size,
 			efa_env.readcopy_pool_size, /* max_cnt==chunk_cnt means pool is not allowed to grow */
 			EFA_RDM_IN_ORDER_ALIGNMENT, /* support in-order aligned send/recv */
+			0,
 			&ep->rx_readcopy_pkt_pool);
 		if (ret)
 			goto err_free;
@@ -223,6 +246,10 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 				 EFA_RDM_BUFPOOL_ALIGNMENT,
 				 0, /* no limit for max_cnt */
 				 ep->base_ep.info->tx_attr->size + ep->base_ep.info->rx_attr->size, 0);
+	if (ret)
+		goto err_free;
+
+	ret = ofi_bufpool_grow(ep->ope_pool);
 	if (ret)
 		goto err_free;
 
@@ -483,8 +510,13 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 {
 	struct efa_domain *efa_domain = NULL;
 	struct efa_rdm_ep *efa_rdm_ep = NULL;
-	int ret, retv, i;
+	int ret, retv;
 	enum fi_hmem_iface iface;
+
+	if (info->mode & FI_RX_CQ_DATA) {
+		EFA_WARN(FI_LOG_EP_CTRL, "FI_RX_CQ_DATA is not supported\n");
+		return -FI_EINVAL;
+	}
 
 	efa_rdm_ep = calloc(1, sizeof(*efa_rdm_ep));
 	if (!efa_rdm_ep)
@@ -588,8 +620,7 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	 * time. Refactor to handle multiple initialized interfaces to impose
 	 * tighter requirements for the default p2p opt
 	 */
-	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(i) {
-		iface = efa_hmem_ifaces[i];
+	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(iface) {
 		if (g_efa_hmem_info[iface].initialized &&
 		    g_efa_hmem_info[iface].p2p_supported_by_device) {
 			/* If user is using libfabric API 1.18 or later, by default EFA
@@ -745,6 +776,8 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Closing ep with unreleased RX pkt_entry: %p\n",
 			pkt_entry);
+		/* Unlink the packet entries before releasing */
+		pkt_entry->next = NULL;
 		efa_rdm_pke_release_rx(pkt_entry);
 	}
 
@@ -768,7 +801,7 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 	dlist_foreach_safe(&efa_rdm_ep->txe_list, entry, tmp) {
 		txe = container_of(entry, struct efa_rdm_ope,
 					ep_entry);
-		EFA_WARN(FI_LOG_EP_CTRL,
+		EFA_INFO(FI_LOG_EP_CTRL,
 			"Closing ep with unreleased txe: %p\n",
 			txe);
 		efa_rdm_txe_release(txe);
@@ -1431,7 +1464,8 @@ ssize_t efa_rdm_ep_cancel(fid_t fid_ep, void *context)
  */
 static int efa_rdm_ep_set_fi_hmem_p2p_opt(struct efa_rdm_ep *efa_rdm_ep, int opt)
 {
-	int i, err;
+	int err;
+	enum fi_hmem_iface iface;
 
 	/*
 	 * Check the opt's validity against the first initialized non-system FI_HMEM
@@ -1442,9 +1476,9 @@ static int efa_rdm_ep_set_fi_hmem_p2p_opt(struct efa_rdm_ep *efa_rdm_ep, int opt
 	 * time. Refactor to handle multiple initialized interfaces to impose
 	 * tighter restrictions on valid p2p options.
 	 */
-	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(i) {
+	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(iface) {
 		err = efa_hmem_validate_p2p_opt(
-			efa_hmem_ifaces[i], opt,
+			iface, opt,
 			efa_rdm_ep->base_ep.info->fabric_attr->api_version);
 		if (err == -FI_ENODATA)
 			continue;
@@ -1699,17 +1733,13 @@ static int efa_rdm_ep_setopt(fid_t fid, int level, int optname,
 	case FI_OPT_EFA_SENDRECV_IN_ORDER_ALIGNED_128_BYTES:
 		if (optlen != sizeof(bool))
 			return -FI_EINVAL;
-		/*
-		 * RDMA read is used to copy data from host bounce buffer to the
-		 * application buffer on device
+		/**
+		 * TODO: support this option after we fix the data copy atomicity
+		 * for general memory types of rx buffer
 		 */
-		if (*(bool *)optval) {
-			ret = efa_base_ep_check_qp_in_order_aligned_128_bytes(&efa_rdm_ep->base_ep, IBV_WR_RDMA_READ);
-			if (ret)
-				return ret;
-		}
-		efa_rdm_ep->sendrecv_in_order_aligned_128_bytes = *(bool *)optval;
-		break;
+		EFA_WARN(FI_LOG_EP_CTRL,
+			"FI_OPT_EFA_SENDRECV_IN_ORDER_ALIGNED_128_BYTES is currently not supported\n");
+		return -FI_EOPNOTSUPP;
 	case FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES:
 		if (optlen != sizeof(bool))
 			return -FI_EINVAL;
@@ -1724,6 +1754,11 @@ static int efa_rdm_ep_setopt(fid_t fid, int level, int optname,
 		if (optlen != sizeof(bool))
 			return -FI_EINVAL;
 		efa_rdm_ep->homogeneous_peers = *(bool *)optval;
+		break;
+	case FI_OPT_EFA_USE_UNSOLICITED_WRITE_RECV:
+		if (optlen != sizeof(bool))
+			return -FI_EINVAL;
+		efa_rdm_ep->base_ep.use_unsolicited_write_recv = *(bool *)optval;
 		break;
 	default:
 		EFA_INFO(FI_LOG_EP_CTRL, "Unknown endpoint option\n");

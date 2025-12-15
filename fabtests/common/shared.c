@@ -1068,6 +1068,10 @@ int ft_getinfo(struct fi_info *hints, struct fi_info **info)
 		hints->domain_attr->mr_mode |= FI_MR_HMEM;
 	}
 
+	/* ft_cqdata_opcodes enum start from 1, 0 means no cq data */
+	if (opts.cqdata_op && allow_rx_cq_data)
+		hints->mode |= FI_RX_CQ_DATA;
+
 	hints->domain_attr->threading = opts.threading;
 
 	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, info);
@@ -3250,6 +3254,9 @@ int ft_finalize_ep(struct fid_ep *ep)
 	int ret;
 	struct fi_context2 ctx;
 
+	if (ft_check_opts(FT_OPT_OOB_SYNC))
+		return ft_sock_sync(oob_sock, 0);
+
 	if (opts.dst_addr) {
 		ret = ft_tx_msg(ep, remote_fi_addr, tx_buf, 4, &ctx,
 					    FI_TRANSMIT_COMPLETE);
@@ -3428,7 +3435,7 @@ void ft_usage(char *name, char *desc)
 void ft_hmem_usage()
 {
 	FT_PRINT_OPTS_USAGE("-D <device_iface>", "Specify device interface: "
-			    "e.g. cuda, ze, neuron, synapseai (default: None). "
+			    "e.g. cuda, ze, neuron, synapseai, rocr (default: None). "
 			    "Automatically enables FI_HMEM (-H)");
 	FT_PRINT_OPTS_USAGE("-i <device_id>", "Specify which device to use (default: 0)");
 	FT_PRINT_OPTS_USAGE("-H", "Enable provider FI_HMEM support");
@@ -3590,6 +3597,8 @@ void ft_parse_hmem_opts(int op, char *optarg, struct ft_opts *opts)
 			opts->iface = FI_HMEM_CUDA;
 		else if (!strncasecmp("neuron", optarg, 6))
 			opts->iface = FI_HMEM_NEURON;
+		else if (!strncasecmp("rocr", optarg, 4))
+			opts->iface = FI_HMEM_ROCR;
 		else if (!strncasecmp("synapseai", optarg, 9)) {
 			opts->iface = FI_HMEM_SYNAPSEAI;
 			opts->options |= FT_OPT_REG_DMABUF_MR;
@@ -3736,15 +3745,11 @@ int ft_parse_api_opts(int op, char *optarg, struct fi_info *hints,
 			opts->rma_op = FT_RMA_READ;
 		} else if (!strcasecmp(optarg, "writedata")) {
 			hints->caps |= FI_WRITE | FI_REMOTE_WRITE;
-			if (allow_rx_cq_data)
-				hints->mode |= FI_RX_CQ_DATA;
 			hints->domain_attr->cq_data_size = 4;
 			opts->rma_op = FT_RMA_WRITEDATA;
 			opts->cqdata_op = FT_CQDATA_WRITEDATA;
 			cq_attr.format = FI_CQ_FORMAT_DATA;
 		} else if (!strcasecmp(optarg, "senddata")) {
-			if (allow_rx_cq_data)
-				hints->mode |= FI_RX_CQ_DATA;
 			hints->domain_attr->cq_data_size = 4;
 			opts->cqdata_op = FT_CQDATA_SENDDATA;
 			cq_attr.format = FI_CQ_FORMAT_DATA;
