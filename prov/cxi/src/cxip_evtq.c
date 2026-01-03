@@ -86,15 +86,14 @@ int cxip_evtq_req_cancel(struct cxip_evtq *evtq, void *req_ctx,
 
 static void cxip_evtq_req_free_no_lock(struct cxip_req *req)
 {
-	struct cxip_req *table_req;
+	void *table_req;
 
 	CXIP_DBG("Freeing req: %p (ID: %d)\n", req, req->req_id);
 
 	dlist_remove(&req->evtq_entry);
 
 	if (req->req_id >= 0) {
-		table_req = (struct cxip_req *)ofi_idx_remove(
-			&req->evtq->req_table, req->req_id);
+		table_req = cxip_req_id_free(req->evtq->req_ids, req->req_id);
 		if (table_req != req)
 			CXIP_WARN("Failed to unmap request: %p\n", req);
 	}
@@ -193,7 +192,7 @@ void cxip_evtq_req_discard(struct cxip_evtq *evtq, void *req_ctx)
  */
 static struct cxip_req *cxip_evtq_req_find(struct cxip_evtq *evtq, int id)
 {
-	return ofi_idx_at(&evtq->req_table, id);
+	return cxip_req_id_lookup(evtq->req_ids, id);
 }
 
 /*
@@ -217,14 +216,12 @@ struct cxip_req *cxip_evtq_req_alloc(struct cxip_evtq *evtq, int remap,
 	memset(req, 0, sizeof(*req));
 
 	if (remap) {
-		req->req_id = ofi_idx_insert(&evtq->req_table, req);
+		req->req_id = cxip_req_id_alloc(evtq->req_ids, req);
 
 		/* Target command buffer IDs are 16 bits wide. */
-		if (req->req_id < 0 || req->req_id >= CXIP_BUFFER_ID_MAX) {
+		if (req->req_id < 0) {
 			CXIP_WARN("Failed to map request: %d\n",
 				  req->req_id);
-			if (req->req_id > 0)
-				ofi_idx_remove(&evtq->req_table, req->req_id);
 			ofi_buf_free(req);
 			req = NULL;
 			goto out;
@@ -463,7 +460,7 @@ void cxip_evtq_fini(struct cxip_evtq *evtq)
 	else
 		free(evtq->buf);
 
-	ofi_idx_reset(&evtq->req_table);
+	cxip_req_id_pool_destroy(evtq->req_ids);
 	ofi_bufpool_destroy(evtq->req_pool);
 	evtq->eq = NULL;
 }
@@ -518,7 +515,15 @@ int cxip_evtq_init(struct cxip_evtq *evtq, struct cxip_cq *cq,
 			  ret, fi_strerror(-ret));
 		return ret;
 	}
-	memset(&evtq->req_table, 0, sizeof(evtq->req_table));
+
+	/* Create lock-free request ID pool (16-bit IDs) */
+	ret = cxip_req_id_pool_create(CXIP_BUFFER_ID_MAX, &evtq->req_ids);
+	if (ret) {
+		CXIP_WARN("Failed to create req ID pool: %d, %s\n",
+			  ret, fi_strerror(-ret));
+		ofi_bufpool_destroy(evtq->req_pool);
+		return ret;
+	}
 	dlist_init(&evtq->req_list);
 
 	/* Attempt to use 2 MiB hugepages. */
@@ -623,7 +628,7 @@ err_free_eq_buf:
 		free(evtq->buf);
 
 err_free_bp:
-	ofi_idx_reset(&evtq->req_table);
+	cxip_req_id_pool_destroy(evtq->req_ids);
 	ofi_bufpool_destroy(evtq->req_pool);
 
 	return ret;

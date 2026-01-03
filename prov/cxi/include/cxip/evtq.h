@@ -11,6 +11,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "cxip/lfqueue.h"
+
 /* Forward declarations */
 struct cxip_cq;
 struct cxip_req;
@@ -35,7 +37,7 @@ struct cxip_evtq {
 
 	/* Protected with ep_ob->lock */
 	struct ofi_bufpool *req_pool;
-	struct indexer req_table;
+	struct cxip_req_id_pool *req_ids;  /* Lock-free request ID pool */
 	struct dlist_entry req_list;
 
 	/* CQ completion batching state.
