@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only
  */
 #include "cxip.h"
+#include "config.h"
 
 #define CXIP_DBG(...) _CXIP_DBG(FI_LOG_DOMAIN, __VA_ARGS__)
 #define CXIP_INFO(...) _CXIP_INFO(FI_LOG_DOMAIN, __VA_ARGS__)

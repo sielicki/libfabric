@@ -44,7 +44,8 @@ struct cxip_txc;
 
 #define CXIP_EP_SEC_CAPS                                              \
 	(FI_SOURCE | FI_SOURCE_ERR | FI_LOCAL_COMM | FI_REMOTE_COMM | \
-	 FI_RMA_EVENT | FI_MULTI_RECV | FI_FENCE | FI_TRIGGER)
+	 FI_RMA_EVENT | FI_MULTI_RECV | FI_FENCE | FI_TRIGGER |       \
+	 FI_REMOTE_CQ_DATA)
 
 #define CXIP_EP_CAPS (CXIP_EP_PRI_CAPS | CXIP_EP_SEC_CAPS)
 

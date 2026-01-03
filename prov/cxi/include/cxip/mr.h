@@ -72,7 +72,8 @@ struct cxip_mr_key {
 			uint64_t id : 16; /* Unique - 64K MR */
 			uint64_t seqnum : 44; /* Sequence with random seed */
 			uint64_t events : 1; /* Requires event generation */
-			uint64_t unused3 : 2;
+			uint64_t cq_data : 1; /* Set by initiator for writedata */
+			uint64_t unused3 : 1;
 			uint64_t is_prov : 1;
 			/* Overloads CXIP_CTRL_LE_TYPE_MR and must be cleared
 			 * before appending MR LE or TX using in match bits.
@@ -142,6 +143,14 @@ struct cxip_mr {
 	enum cxip_mr_state mr_state;
 	int64_t mr_id; // Non-cached provider key uniqueness
 	struct cxip_ctrl_req req;
+
+	/* Notification LE request for writedata emulated in-out-in.
+	 * Used to receive 0-length completion notifications that carry
+	 * the immediate data via header_data.
+	 */
+	struct cxip_ctrl_req notify_req;
+	bool notify_enabled;
+
 	bool optimized;
 
 	void *buf; // memory buffer VA

@@ -102,6 +102,11 @@ struct cxip_ux_send;
 
 #define CXIP_PTL_IDX_RNR_RXQ 1
 
+/* Writedata notification PTE - receives 0-length completion notifications
+ * for fi_writedata() operations using emulated in-out-in semantics.
+ */
+#define CXIP_PTL_IDX_WRITEDATA_NOTIFY 2
+
 #define CXIP_PTL_IDX_WRITE_MR_OPT_BASE 17
 
 #define CXIP_PTL_IDX_READ_MR_OPT_BASE 128
@@ -161,6 +166,16 @@ struct cxip_ux_send;
 
 #define CXIP_IS_PROV_MR_KEY_BIT (1ULL << 63)
 
+/* Bit 61 in MR key indicates writedata (FI_REMOTE_CQ_DATA) operation.
+ * Set by initiator in match_bits, checked by target to generate CQ entry.
+ * This uses one of the previously unused bits in the provider key structure.
+ */
+#define CXIP_MR_KEY_CQ_DATA_BIT (1ULL << 61)
+
+/* Mask out provider bit when using key as match bits.
+ * Note: cq_data bit is intentionally NOT masked - it must be preserved
+ * so target can detect writedata operations.
+ */
 #define CXIP_KEY_MATCH_BITS(key) ((key) & ~CXIP_IS_PROV_MR_KEY_BIT)
 
 #define CXI_PLATFORM_ASIC 0

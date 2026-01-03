@@ -194,11 +194,11 @@ static bool cxip_rma_emit_dma_need_req(size_t len, uint64_t flags,
 }
 
 static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
-			     struct cxip_mr *mr, union c_fab_addr *dfa,
-			     uint8_t *idx_ext, uint16_t vni, uint64_t addr,
-			     uint64_t key, uint64_t data, uint64_t flags,
-			     void *context, bool write, bool unr,
-			     uint32_t tclass,
+			     struct cxip_mr *mr, struct cxip_addr *caddr,
+			     union c_fab_addr *dfa, uint8_t *idx_ext,
+			     uint16_t vni, uint64_t addr, uint64_t key,
+			     uint64_t data, uint64_t flags, void *context,
+			     bool write, bool unr, uint32_t tclass,
 			     enum cxi_traffic_class_type tc_type,
 			     bool triggered, uint64_t trig_thresh,
 			     struct cxip_cntr *trig_cntr,
@@ -299,6 +299,13 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 	dma_cmd.eq = cxip_evtq_eqn(&txc->tx_evtq);
 	dma_cmd.match_bits = CXIP_KEY_MATCH_BITS(key);
 
+	/* For writedata operations, set the cq_data bit in match_bits so
+	 * the target MR can distinguish this from regular writes and
+	 * generate a CQ completion with FI_REMOTE_CQ_DATA.
+	 */
+	if (flags & FI_REMOTE_CQ_DATA)
+		dma_cmd.match_bits |= CXIP_MR_KEY_CQ_DATA_BIT;
+
 	if (req) {
 		dma_cmd.user_ptr = (uint64_t)req;
 	} else {
@@ -324,6 +331,13 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 
 	if (write) {
 		dma_cmd.command.opcode = C_CMD_PUT;
+
+		/* Note: For writedata operations (FI_REMOTE_CQ_DATA), we use
+		 * the emulated in-out-in protocol. The data PUT is restricted
+		 * (no header_data support), and a separate 0-length unrestricted
+		 * notification PUT carries the header_data. See the notification
+		 * PUT code below.
+		 */
 
 		/* Triggered DMA operations have their own completion counter
 		 * and the one associated with the TXC cannot be used.
@@ -375,6 +389,84 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 		goto err_free_rma_buf;
 	}
 
+	/* For writedata operations using emulated in-out-in protocol, emit
+	 * a 0-length unrestricted PUT to the notification PTE. This PUT
+	 * carries the immediate data (header_data) and the data length
+	 * (remote_offset) to the target's notification LE.
+	 *
+	 * The notification PUT is:
+	 * - Unrestricted (to deliver header_data)
+	 * - 0-length (no actual data, just signaling)
+	 * - Targeted at CXIP_PTL_IDX_WRITEDATA_NOTIFY PTE
+	 * - match_bits = key (to match the correct MR's notification LE)
+	 * - remote_offset = len (to convey the actual data length)
+	 * - header_data = data (the immediate data from fi_writedata)
+	 */
+	if ((flags & FI_REMOTE_CQ_DATA) && write) {
+		struct c_full_dma_cmd notify_cmd = {};
+		union c_fab_addr notify_dfa;
+		uint8_t notify_idx_ext;
+
+		/* Build DFA for notification PTE using same target address */
+		cxi_build_dfa(caddr->nic, caddr->pid, txc->pid_bits,
+			      CXIP_PTL_IDX_WRITEDATA_NOTIFY, &notify_dfa,
+			      &notify_idx_ext);
+
+		notify_cmd.command.cmd_type = C_CMD_TYPE_DMA;
+		notify_cmd.command.opcode = C_CMD_PUT;
+		notify_cmd.index_ext = notify_idx_ext;
+		notify_cmd.dfa = notify_dfa;
+		notify_cmd.eq = cxip_evtq_eqn(&txc->tx_evtq);
+		/* VNI is passed as parameter to cxip_txc_emit_dma */
+
+		/* match_bits = key to find the correct notification LE */
+		notify_cmd.match_bits = CXIP_KEY_MATCH_BITS(key);
+
+		/* remote_offset encodes the data length for the target.
+		 * With MANAGE_LOCAL on the LE, HW ignores this for buffer
+		 * addressing, but delivers it in the event for SW to use.
+		 */
+		notify_cmd.remote_offset = len;
+
+		/* header_data carries the immediate data from fi_writedata */
+		notify_cmd.header_data = data;
+
+		/* 0-length PUT - no local buffer needed */
+		notify_cmd.request_len = 0;
+
+		/* Unrestricted to deliver header_data */
+		notify_cmd.restricted = 0;
+
+		/* Suppress ALL events for notification PUT.
+		 * - event_send_disable: No send event
+		 * - event_success_disable: No success event
+		 * - event_ct_ack = 0: No counter event
+		 * - No user_ptr needed since no events expected
+		 *
+		 * If the notification PUT fails on the target, the target's
+		 * notification LE will generate an error event there. We
+		 * cannot easily propagate that error back to the initiator
+		 * since the data PUT has already completed successfully.
+		 */
+		notify_cmd.event_send_disable = 1;
+		notify_cmd.event_success_disable = 1;
+		notify_cmd.user_ptr = 0;
+
+		ret = cxip_txc_emit_dma(txc, vni, cxip_ofi_to_cxi_tc(tclass),
+					CXI_TC_TYPE_DEFAULT, NULL, 0,
+					&notify_cmd, flags);
+		if (ret) {
+			TXC_WARN(txc, "Failed to emit notify PUT: %d:%s\n",
+				 ret, fi_strerror(-ret));
+			/* Data PUT already sent - can't easily rollback.
+			 * The target will get the data but not the completion
+			 * notification. Return the error so the initiator
+			 * knows something went wrong, even though data arrived.
+			 */
+			return ret;
+		}
+	}
+
 	return FI_SUCCESS;
 
 err_free_rma_buf:
@@ -388,10 +480,10 @@ err:
 }
 
 static int cxip_rma_emit_idc(struct cxip_txc *txc, const void *buf, size_t len,
-			     union c_fab_addr *dfa, uint8_t *idx_ext,
-			     uint16_t vni, uint64_t addr, uint64_t key,
-			     uint64_t data, uint64_t flags, void *context,
-			     bool unr, uint32_t tclass,
+			     struct cxip_addr *caddr, union c_fab_addr *dfa,
+			     uint8_t *idx_ext, uint16_t vni, uint64_t addr,
+			     uint64_t key, uint64_t data, uint64_t flags,
+			     void *context, bool unr, uint32_t tclass,
 			     enum cxi_traffic_class_type tc_type)
 {
 	int ret;
@@ -509,6 +601,64 @@ static int cxip_rma_emit_idc(struct cxip_txc *txc, const void *buf, size_t len,
 	if (hmem_buf)
 		cxip_txc_ibuf_free(txc, hmem_buf);
 
+	/* For writedata operations using emulated in-out-in protocol, emit
+	 * a 0-length unrestricted DMA PUT to the notification PTE. IDC commands
+	 * don't support header_data, so we must use a DMA command for the
+	 * notification PUT even when the data transfer uses IDC.
+	 */
+	if (flags & FI_REMOTE_CQ_DATA) {
+		struct c_full_dma_cmd notify_cmd = {};
+		union c_fab_addr notify_dfa;
+		uint8_t notify_idx_ext;
+
+		/* Build DFA for notification PTE using same target address */
+		cxi_build_dfa(caddr->nic, caddr->pid, txc->pid_bits,
+			      CXIP_PTL_IDX_WRITEDATA_NOTIFY, &notify_dfa,
+			      &notify_idx_ext);
+
+		notify_cmd.command.cmd_type = C_CMD_TYPE_DMA;
+		notify_cmd.command.opcode = C_CMD_PUT;
+		notify_cmd.index_ext = notify_idx_ext;
+		notify_cmd.dfa = notify_dfa;
+		notify_cmd.eq = cxip_evtq_eqn(&txc->tx_evtq);
+		/* VNI is passed as parameter to cxip_txc_emit_dma */
+
+		/* match_bits = key to find the correct notification LE */
+		notify_cmd.match_bits = CXIP_KEY_MATCH_BITS(key);
+
+		/* remote_offset encodes the data length for the target */
+		notify_cmd.remote_offset = len;
+
+		/* header_data carries the immediate data from fi_writedata */
+		notify_cmd.header_data = data;
+
+		/* 0-length PUT - no local buffer needed */
+		notify_cmd.request_len = 0;
+
+		/* Unrestricted to deliver header_data */
+		notify_cmd.restricted = 0;
+
+		/* Suppress ALL events for notification PUT.
+		 * See comment in cxip_rma_emit_dma for rationale.
+		 */
+		notify_cmd.event_send_disable = 1;
+		notify_cmd.event_success_disable = 1;
+		notify_cmd.user_ptr = 0;
+
+		ret = cxip_txc_emit_dma(txc, vni, cxip_ofi_to_cxi_tc(tclass),
+					CXI_TC_TYPE_DEFAULT, NULL, 0,
+					&notify_cmd, flags);
+		if (ret) {
+			TXC_WARN(txc, "Failed to emit notify PUT for IDC: %d:%s\n",
+				 ret, fi_strerror(-ret));
+			/* IDC PUT already sent - can't rollback.
+			 * Target gets data but not the completion notification.
+			 * Return error so initiator knows something went wrong.
+			 */
+			return ret;
+		}
+	}
+
 	return FI_SUCCESS;
 
 err_free_hmem_buf:
@@ -522,13 +672,22 @@ err:
 }
 
 static bool cxip_rma_is_unrestricted(struct cxip_txc *txc, uint64_t key,
-				     uint64_t msg_order, bool write)
+				     uint64_t msg_order, bool write,
+				     uint64_t flags)
 {
 	/* Unoptimized keys are implemented with match bits and must always be
 	 * unrestricted.
 	 */
 	if (!cxip_generic_is_mr_key_opt(key))
 		return true;
+
+	/* For writedata operations using emulated in-out-in protocol, the
+	 * data PUT can be restricted. The notification PUT (0-length) will
+	 * be unrestricted and carries the header_data. This avoids the
+	 * ordering penalties of unrestricted mode for the bulk data transfer.
+	 */
+	if (flags & FI_REMOTE_CQ_DATA)
+		return false;
 
 	/* If MR indicates remote events are required unrestricted must be
 	 * used. If the MR is a client key, we assume if FI_RMA_EVENTS are
@@ -574,6 +733,10 @@ static bool cxip_rma_is_idc(struct cxip_txc *txc, uint64_t key, size_t len,
 	/* Don't issue non-inject operation as IDC if disabled by env */
 	if (!(flags & FI_INJECT) && cxip_env.disable_non_inject_rma_idc)
 	       return false;
+
+	/* IDC PUT with writedata is supported - the IDC handles the data
+	 * transfer and a separate 0-length DMA PUT sends the notification.
+	 */
 
 	return true;
 }
@@ -634,7 +797,24 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 		return -FI_EKEYREJECTED;
 	}
 
-	unr = cxip_rma_is_unrestricted(txc, key, msg_order, write);
+	/* Writedata requires provider keys so we can verify the target MR
+	 * has success events enabled (indicated by the 'events' bit in the key).
+	 * Client keys don't encode this information, so we can't validate them.
+	 */
+	if (flags & FI_REMOTE_CQ_DATA) {
+		struct cxip_mr_key mr_key = { .raw = key };
+
+		if (!mr_key.is_prov) {
+			TXC_WARN(txc, "FI_REMOTE_CQ_DATA requires provider key (FI_MR_PROV_KEY): key=0x%lx\n", key);
+			return -FI_EINVAL;
+		}
+		if (!cxip_generic_is_mr_key_events(txc->ep_obj->caps, key)) {
+			TXC_WARN(txc, "FI_REMOTE_CQ_DATA requires target MR with FI_RMA_EVENT: key=0x%lx\n", key);
+			return -FI_EINVAL;
+		}
+	}
+
+	unr = cxip_rma_is_unrestricted(txc, key, msg_order, write, flags);
 	idc = cxip_rma_is_idc(txc, key, len, write, triggered, unr, flags);
 
 	/* Build target network address. */
@@ -669,13 +849,13 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	 */
 	ofi_genlock_lock(&txc->ep_obj->lock);
 	if (idc)
-		ret = cxip_rma_emit_idc(txc, buf, len, &dfa, &idx_ext, vni,
-					addr, key, data, flags, context, unr,
-					tclass, tc_type);
-	else
-		ret = cxip_rma_emit_dma(txc, buf, len, desc, &dfa, &idx_ext,
+		ret = cxip_rma_emit_idc(txc, buf, len, &caddr, &dfa, &idx_ext,
 					vni, addr, key, data, flags, context,
-					write, unr, tclass, tc_type,
+					unr, tclass, tc_type);
+	else
+		ret = cxip_rma_emit_dma(txc, buf, len, desc, &caddr, &dfa,
+					&idx_ext, vni, addr, key, data, flags,
+					context, write, unr, tclass, tc_type,
 					triggered, trig_thresh,
 					trig_cntr, comp_cntr);
 	ofi_genlock_unlock(&txc->ep_obj->lock);
@@ -803,6 +983,54 @@ ssize_t cxip_rma_inject(struct fid_ep *fid_ep, const void *buf, size_t len,
 			       false, 0, NULL, NULL);
 }
 
+/*
+ * cxip_rma_writedata() - RMA write with immediate data.
+ *
+ * Implements fi_writedata() using a cq_data bit approach:
+ * - Initiator sets CXIP_MR_KEY_CQ_DATA_BIT in match_bits to signal writedata
+ * - Initiator passes immediate data via header_data in DMA command
+ * - Target MR LE ignores the cq_data bit for matching
+ * - Target checks cq_data bit on PUT events to decide whether to generate
+ *   a CQ completion with FI_REMOTE_CQ_DATA
+ *
+ * This works with both restricted and unrestricted MR modes, avoiding
+ * the ordering penalties of forcing unrestricted mode for large transfers.
+ * Only MRs created with FI_RMA_EVENT will generate remote CQ completions.
+ */
+static ssize_t cxip_rma_writedata(struct fid_ep *fid_ep, const void *buf,
+				  size_t len, void *desc, uint64_t data,
+				  fi_addr_t dest_addr, uint64_t addr,
+				  uint64_t key, void *context)
+{
+	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
+	uint64_t flags = ep->tx_attr.op_flags | FI_REMOTE_CQ_DATA;
+
+	return cxip_rma_common(FI_OP_WRITE, ep->ep_obj->txc, buf, len, desc,
+			       dest_addr, addr, key, data, flags,
+			       ep->tx_attr.tclass, ep->tx_attr.msg_order,
+			       context, false, 0, NULL, NULL);
+}
+
+/*
+ * cxip_rma_inject_writedata() - Inject RMA write with immediate data.
+ *
+ * Same as cxip_rma_writedata() but with FI_INJECT semantics (buffer can
+ * be reused immediately after call returns).
+ */
+static ssize_t cxip_rma_inject_writedata(struct fid_ep *fid_ep, const void *buf,
+					 size_t len, uint64_t data,
+					 fi_addr_t dest_addr, uint64_t addr,
+					 uint64_t key)
+{
+	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
+	uint64_t flags = FI_INJECT | FI_REMOTE_CQ_DATA;
+
+	return cxip_rma_common(FI_OP_WRITE, ep->ep_obj->txc, buf, len, NULL,
+			       dest_addr, addr, key, data, flags,
+			       ep->tx_attr.tclass, ep->tx_attr.msg_order, NULL,
+			       false, 0, NULL, NULL);
+}
+
 static ssize_t cxip_rma_read(struct fid_ep *fid_ep, void *buf, size_t len,
 			     void *desc, fi_addr_t src_addr, uint64_t addr,
 			     uint64_t key, void *context)
@@ -903,8 +1131,8 @@ struct fi_ops_rma cxip_ep_rma_ops = {
 	.writev = cxip_rma_writev,
 	.writemsg = cxip_rma_writemsg,
 	.inject = cxip_rma_inject,
-	.injectdata = fi_no_rma_injectdata,
-	.writedata = fi_no_rma_writedata,
+	.injectdata = cxip_rma_inject_writedata,
+	.writedata = cxip_rma_writedata,
 };
 
 struct fi_ops_rma cxip_ep_rma_no_ops = {

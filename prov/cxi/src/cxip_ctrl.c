@@ -635,6 +635,54 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 	if (ret != FI_SUCCESS)
 		goto free_pte;
 
+	/* Initialize writedata notification PTE for emulated in-out-in.
+	 * This PTE receives 0-length unrestricted PUTs that carry the
+	 * immediate data (header_data) for fi_writedata() completions.
+	 * Each MR with FI_RMA_EVENT will append its own LE to this PTE.
+	 */
+	ret = cxip_pte_alloc_nomap(ep_obj->ptable, ep_obj->ctrl.tgt_evtq,
+				   &pt_opts, NULL, NULL,
+				   &ep_obj->ctrl.writedata_pte);
+	if (ret != FI_SUCCESS) {
+		CXIP_WARN("Failed to allocate writedata notify PTE: %d\n", ret);
+		goto free_ctrl_msg;
+	}
+
+	ret = cxip_pte_map(ep_obj->ctrl.writedata_pte,
+			   CXIP_PTL_IDX_WRITEDATA_NOTIFY, false);
+	if (ret != FI_SUCCESS) {
+		CXIP_WARN("Failed to map writedata notify PTE: %d\n", ret);
+		goto free_writedata_pte;
+	}
+
+	ret = cxip_pte_set_state(ep_obj->ctrl.writedata_pte, ep_obj->ctrl.tgq,
+				 C_PTLTE_ENABLED, CXIP_PTE_IGNORE_DROPS);
+	if (ret) {
+		CXIP_WARN("Failed to enable writedata notify PTE: %d\n", ret);
+		goto free_writedata_pte;
+	}
+
+	/* Wait for writedata PTE enable event */
+	while (!(event = cxi_eq_get_event(ep_obj->ctrl.tgt_evtq)))
+		sched_yield();
+
+	switch (event->hdr.event_type) {
+	case C_EVENT_STATE_CHANGE:
+		if (event->tgt_long.return_code != C_RC_OK ||
+		    event->tgt_long.initiator.state_change.ptlte_state !=
+		    C_PTLTE_ENABLED ||
+		    event->tgt_long.ptlte_index !=
+		    ep_obj->ctrl.writedata_pte->pte->ptn)
+			CXIP_FATAL("Invalid writedata PTE enable event\n");
+		break;
+	case C_EVENT_COMMAND_FAILURE:
+		CXIP_FATAL("Writedata PTE command failure\n");
+	default:
+		CXIP_FATAL("Invalid event type: %d\n", event->hdr.event_type);
+	}
+
+	cxi_eq_ack_events(ep_obj->ctrl.tgt_evtq);
+
 	/* Reserve 4 event queue slots to prevent EQ overrun.
 	 * 1. One slot for EQ status writeback
 	 * 2. One slot for default reserved_fc value
@@ -648,6 +696,10 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 
 	return FI_SUCCESS;
 
+free_writedata_pte:
+	cxip_pte_free(ep_obj->ctrl.writedata_pte);
+free_ctrl_msg:
+	cxip_ctrl_msg_fini(ep_obj);
 free_pte:
 	cxip_pte_free(ep_obj->ctrl.pte);
 free_tgq:
@@ -678,6 +730,11 @@ err:
 void cxip_ep_ctrl_fini(struct cxip_ep_obj *ep_obj)
 {
 	cxip_ctrl_mr_cache_flush(ep_obj);
+
+	/* Free writedata notification PTE before ctrl message PTE */
+	if (ep_obj->ctrl.writedata_pte)
+		cxip_pte_free(ep_obj->ctrl.writedata_pte);
+
 	cxip_ctrl_msg_fini(ep_obj);
 	cxip_pte_free(ep_obj->ctrl.pte);
 	cxip_ep_cmdq_put(ep_obj, false);

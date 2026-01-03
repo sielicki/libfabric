@@ -62,6 +62,13 @@ struct cxip_ctrl {
 	struct cxip_pte *pte;
 	struct cxip_ctrl_req msg_req;
 
+	/* Writedata notification PTE for emulated in-out-in semantics.
+	 * Receives 0-length unrestricted PUTs that carry header_data
+	 * (immediate data) and signal completion of fi_writedata().
+	 * Uses separate PTE mapped to CXIP_PTL_IDX_WRITEDATA_NOTIFY.
+	 */
+	struct cxip_pte *writedata_pte;
+
 	/* FI_MR_PROV_KEY caching, protected with ep_obj->lock */
 	struct cxip_mr_lac_cache std_mr_cache[CXIP_NUM_CACHED_KEY_LE];
 	struct cxip_mr_lac_cache opt_mr_cache[CXIP_NUM_CACHED_KEY_LE];
