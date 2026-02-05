@@ -47,55 +47,63 @@
  * frmwk_free_libfabric() terminates the libfabric instance and cleans up.
  */
 
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include <unistd.h>
-#include <string.h>
 #include <assert.h>
 #include <malloc.h>
+#include <stdarg.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <time.h>
+#include <unistd.h>
 
-#include <netdb.h>
-#include <sys/types.h>
-#include <sys/socket.h>
 #include <arpa/inet.h>
+#include <netdb.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 
-#include <ofi.h>
 #include <cxip.h>
+#include <ofi.h>
 
 #include "multinode_frmwk.h"
 
 /* If not compiled with DEBUG=1, this is a no-op */
-#define	TRACE(fmt, ...)	CXIP_COLL_TRACE(CXIP_TRC_TEST_CODE, fmt, ##__VA_ARGS__)
+#define TRACE(fmt, ...) CXIP_COLL_TRACE(CXIP_TRC_TEST_CODE, fmt, ##__VA_ARGS__)
 
-#define RETURN_ERROR(ret, txt) \
-	if (ret != FI_SUCCESS) { \
+#define RETURN_ERROR(ret, txt)                                               \
+	if (ret != FI_SUCCESS) {                                             \
 		fprintf(stderr, "FAILED %s = %s\n", txt, fi_strerror(-ret)); \
-		return ret; \
+		return ret;                                                  \
 	}
 
-#define	CLOSE_OBJ(obj)	do {if (obj) fi_close(&obj->fid); } while (0)
+#define CLOSE_OBJ(obj)                       \
+	do {                                 \
+		if (obj)                     \
+			fi_close(&obj->fid); \
+	} while (0)
 
 /* Taken from SLURM environment variables */
-int frmwk_nics_per_rank;		/* PMI_NUM_HSNS (defaults to 1) */
-int frmwk_numranks;			/* PMI_SIZE */
-const char *frmwk_unique;		/* PMI_SHARED_SECRET */
-int frmwk_rank;				/* PMI_RANK */
-int frmwk_hwcoll_addrs_per_job;		/* FI_CXI_HWCOLL_ADDRS_PER_JOB */
-int frmwk_hwcoll_min_nodes;		/* FI_CXI_HWCOLL_MIN_NODES */
-const char *frmwk_jobid;		/* FI_CXI_COLL_JOB_ID */
-const char *frmwk_jobstep;		/* FI_CXI_COLL_JOB_STEP_ID */
-const char *frmwk_mcast_token;		/* FI_CXI_COLL_MCAST_TOKEN */
-const char *frmwk_fabric_mgr_url;	/* FI_CXI_COLL_FABRIC_MGR_URL */
-const char *frmwk_nodename;		/* SLURMD_NODENAME */
-const char frmwk_node0[32];		/* SLURMD_NODELIST (first name) */
-union nicaddr *frmwk_nics;		/* array of NIC addresses  */
-int frmwk_numnics;			/* number of NIC addresses */
+int frmwk_nics_per_rank; /* PMI_NUM_HSNS (defaults to 1) */
+int frmwk_numranks; /* PMI_SIZE */
+const char *frmwk_unique; /* PMI_SHARED_SECRET */
+int frmwk_rank; /* PMI_RANK */
+int frmwk_hwcoll_addrs_per_job; /* FI_CXI_HWCOLL_ADDRS_PER_JOB */
+int frmwk_hwcoll_min_nodes; /* FI_CXI_HWCOLL_MIN_NODES */
+const char *frmwk_jobid; /* FI_CXI_COLL_JOB_ID */
+const char *frmwk_jobstep; /* FI_CXI_COLL_JOB_STEP_ID */
+const char *frmwk_mcast_token; /* FI_CXI_COLL_MCAST_TOKEN */
+const char *frmwk_fabric_mgr_url; /* FI_CXI_COLL_FABRIC_MGR_URL */
+const char *frmwk_nodename; /* SLURMD_NODENAME */
+char frmwk_node0[32]; /* SLURMD_NODELIST (first name) */
+union nicaddr *frmwk_nics; /* array of NIC addresses  */
+int frmwk_numnics; /* number of NIC addresses */
 
 int _frmwk_init;
+
+/* Optional configuration for frmwk_init_libfabric() */
+uint64_t frmwk_extra_caps;
+int frmwk_extra_mr_mode;
 
 char *cxit_node;
 char *cxit_service;
@@ -113,26 +121,21 @@ struct mem_region {
 };
 
 struct fid_ep *cxit_ep;
-struct fi_eq_attr cxit_eq_attr = {
-	.size = 32,
-	.flags = FI_WRITE,
-	.wait_obj = FI_WAIT_NONE
-};
+struct fi_eq_attr cxit_eq_attr = {.size = 32,
+				  .flags = FI_WRITE,
+				  .wait_obj = FI_WAIT_NONE};
 uint64_t cxit_eq_bind_flags = 0;
 
 struct fid_eq *cxit_eq;
 
-struct fi_cq_attr cxit_rx_cq_attr = {
-	.format = FI_CQ_FORMAT_TAGGED
+struct fi_cq_attr cxit_rx_cq_attr = {.format = FI_CQ_FORMAT_TAGGED
 
 };
 uint64_t cxit_rx_cq_bind_flags = FI_RECV;
 struct fid_cq *cxit_rx_cq;
 
-struct fi_cq_attr cxit_tx_cq_attr = {
-	.format = FI_CQ_FORMAT_TAGGED,
-	.size = 16384
-};
+struct fi_cq_attr cxit_tx_cq_attr = {.format = FI_CQ_FORMAT_TAGGED,
+				     .size = 16384};
 uint64_t cxit_tx_cq_bind_flags = FI_TRANSMIT;
 struct fid_cq *cxit_tx_cq;
 
@@ -145,10 +148,7 @@ struct fid_cntr *cxit_read_cntr;
 struct fid_cntr *cxit_write_cntr;
 struct fid_cntr *cxit_rem_cntr;
 
-struct fi_av_attr cxit_av_attr = {
-	.type = FI_AV_TABLE,
-	.rx_ctx_bits = 0
-};
+struct fi_av_attr cxit_av_attr = {.type = FI_AV_TABLE, .rx_ctx_bits = 0};
 struct fid_av *cxit_av;
 
 int cxit_n_ifs;
@@ -173,8 +173,8 @@ int mr_create_ext(size_t len, uint64_t access, uint8_t seed, uint64_t key,
 	for (size_t i = 0; i < len; i++)
 		mr->mem[i] = i + seed;
 
-	ret = fi_mr_reg(cxit_domain, mr->mem, len, access, 0, key, 0,
-			&mr->mr, NULL);
+	ret = fi_mr_reg(cxit_domain, mr->mem, len, access, 0, key, 0, &mr->mr,
+			NULL);
 	RETURN_ERROR(ret, "fi_mr_reg");
 
 	ret = fi_mr_bind(mr->mr, &cxit_ep->fid, 0);
@@ -210,9 +210,8 @@ static ssize_t copy_from_hmem_iov(void *dest, size_t size,
 
 static ssize_t copy_to_hmem_iov(enum fi_hmem_iface iface, uint64_t device,
 				const struct iovec *hmem_iov,
-				size_t hmem_iov_count,
-				uint64_t hmem_iov_offset, const void *src,
-				size_t size)
+				size_t hmem_iov_count, uint64_t hmem_iov_offset,
+				const void *src, size_t size)
 {
 	size_t cpy_size = MIN(size, hmem_iov->iov_len);
 
@@ -274,10 +273,10 @@ int frmwk_log(const char *fmt, ...)
  * This selects one node across all of the nodes to serve as a local root, and
  * then uses sockets to transfer information.
  */
-#define	FAIL(cond, msg, label) \
-	if (cond) { \
+#define FAIL(cond, msg, label)                                     \
+	if (cond) {                                                \
 		fprintf(stderr, "FAIL socket %s=%d\n", msg, cond); \
-		goto label; \
+		goto label;                                        \
 	}
 
 /* Sockets can chop up large reads */
@@ -317,7 +316,7 @@ int _accept(int portno, size_t size, void *data, void *rslt)
 {
 	int listenfd = 0;
 	int *connfd, conncnt, connidx;
-	struct sockaddr_in serv_addr = { 0 };
+	struct sockaddr_in serv_addr = {0};
 	char *rsltp;
 	size_t siz;
 	ssize_t len;
@@ -331,15 +330,15 @@ int _accept(int portno, size_t size, void *data, void *rslt)
 	FAIL(listenfd < 0, "socket", lablisten);
 
 	// release the socket immediately after termination
-	ret = setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR,
-			 &(int){1}, sizeof(int));
+	ret = setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &(int) {1},
+			 sizeof(int));
 	FAIL(ret < 0, "reuseaddr", lablisten);
 
 	// bind the socket to accept any incoming connections
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 	serv_addr.sin_port = htons(portno);
-	ret = bind(listenfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
+	ret = bind(listenfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr));
 	FAIL(ret < 0, "bind", lablisten);
 
 	// limit the number of connections
@@ -364,7 +363,7 @@ int _accept(int portno, size_t size, void *data, void *rslt)
 	for (connidx = 0; connidx < conncnt; connidx++) {
 		int fd;
 
-		fd = accept(listenfd, (struct sockaddr *)NULL, NULL);
+		fd = accept(listenfd, (struct sockaddr *) NULL, NULL);
 		FAIL(fd < 0, "accept", labclose);
 
 		// record this for later send
@@ -380,8 +379,7 @@ int _accept(int portno, size_t size, void *data, void *rslt)
 	}
 
 	// all contributions complete, send the result
-	for (connidx = 0; connidx < conncnt; connidx++)
-	{
+	for (connidx = 0; connidx < conncnt; connidx++) {
 		int fd;
 
 		fd = connfd[connidx];
@@ -406,7 +404,7 @@ lablisten:
 int _connect(int portno, size_t size, void *data, void *rslt)
 {
 	int connfd = 0;
-	struct sockaddr_in serv_addr = { 0 };
+	struct sockaddr_in serv_addr = {0};
 	struct hostent *he;
 	struct in_addr **addr_list;
 	size_t siz;
@@ -421,15 +419,15 @@ int _connect(int portno, size_t size, void *data, void *rslt)
 	FAIL(connfd < 0, "socket", labclose);
 
 	// release the socket immediately after termination
-	ret = setsockopt(connfd, SOL_SOCKET, SO_REUSEADDR,
-			 &(int){1}, sizeof(int));
+	ret = setsockopt(connfd, SOL_SOCKET, SO_REUSEADDR, &(int) {1},
+			 sizeof(int));
 	FAIL(ret < 0, "reuseaddr", labclose);
 
 	// get network address of frmwk_node0 and connect socket
 	he = gethostbyname(frmwk_node0);
 	FAIL(!he, "gethostbyname", labclose);
 
-	addr_list = (struct in_addr **)he->h_addr_list;
+	addr_list = (struct in_addr **) he->h_addr_list;
 	FAIL(!addr_list, "gethostbyname empty", labclose);
 
 	serv_addr.sin_family = AF_INET;
@@ -437,7 +435,7 @@ int _connect(int portno, size_t size, void *data, void *rslt)
 	serv_addr.sin_addr = *addr_list[0];
 	do {
 		usleep(1000);
-		ret = connect(connfd, (struct sockaddr *)&serv_addr,
+		ret = connect(connfd, (struct sockaddr *) &serv_addr,
 			      sizeof(serv_addr));
 	} while (ret < 0);
 
@@ -464,8 +462,8 @@ int frmwk_allgather(size_t size, void *data, void *rslt)
 	int portno = 5000;
 
 	return (!strcmp(frmwk_node0, frmwk_nodename)) ?
-		_accept(portno, size, data, rslt) :
-		_connect(portno, size, data, rslt);
+		       _accept(portno, size, data, rslt) :
+		       _connect(portno, size, data, rslt);
 }
 
 int frmwk_barrier(void)
@@ -547,8 +545,11 @@ int frmwk_init_libfabric(void)
 	ret = (cxit_fi_hints != NULL) ? FI_SUCCESS : FI_ENOMEM;
 
 	cxit_fi_hints->fabric_attr->prov_name = strdup("cxi");
-	cxit_fi_hints->domain_attr->mr_mode = FI_MR_ENDPOINT;
+	cxit_fi_hints->domain_attr->mr_mode =
+		FI_MR_ENDPOINT | frmwk_extra_mr_mode;
 	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
+	if (frmwk_extra_caps)
+		cxit_fi_hints->caps |= frmwk_extra_caps;
 
 	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 			 cxit_node, cxit_service, cxit_flags, cxit_fi_hints,
@@ -562,15 +563,15 @@ int frmwk_init_libfabric(void)
 	RETURN_ERROR(ret, "fi_domain");
 
 	ret = fi_open_ops(&cxit_domain->fid, FI_CXI_DOM_OPS_1, 0,
-			  (void **)&cxit_dom_ops, NULL);
+			  (void **) &cxit_dom_ops, NULL);
 	RETURN_ERROR(ret, "fi_open_ops 1");
 
 	ret = fi_open_ops(&cxit_domain->fid, FI_CXI_DOM_OPS_2, 0,
-			  (void **)&cxit_dom_ops, NULL);
+			  (void **) &cxit_dom_ops, NULL);
 	RETURN_ERROR(ret, "fi_open_ops 2");
 
 	ret = fi_open_ops(&cxit_domain->fid, FI_CXI_DOM_OPS_3, 0,
-			  (void **)&cxit_dom_ops, NULL);
+			  (void **) &cxit_dom_ops, NULL);
 	RETURN_ERROR(ret, "fi_open_ops 3");
 
 	ret = fi_set_ops(&cxit_domain->fid, FI_SET_OPS_HMEM_OVERRIDE, 0,
@@ -675,8 +676,7 @@ int frmwk_populate_av(fi_addr_t **fiaddrp, size_t *sizep)
 
 	for (i = 0; i < frmwk_numnics; i++)
 		alladdrs[i].nic = frmwk_nics[i].nic;
-	ret = fi_av_insert(cxit_av, alladdrs, frmwk_numnics,
-			   fiaddrs, 0, NULL);
+	ret = fi_av_insert(cxit_av, alladdrs, frmwk_numnics, fiaddrs, 0, NULL);
 	if (ret != frmwk_numnics)
 		goto fail;
 
@@ -720,8 +720,8 @@ int frmwk_errmsg(int ret, const char *fmt, ...)
 	va_end(args);
 	if (len < 0)
 		str = "(no errmsg)";
-	fprintf(stderr, "%s rank %2d of %2d FAILED %d: %s",
-		host, frmwk_rank, frmwk_numranks, ret, str);
+	fprintf(stderr, "%s rank %2d of %2d FAILED %d: %s", host, frmwk_rank,
+		frmwk_numranks, ret, str);
 	if (len >= 0)
 		free(str);
 
@@ -764,8 +764,8 @@ static void get_local_nic(int hsn, union nicaddr *nic)
 /* Sort comparator */
 static int _compare(const void *v1, const void *v2)
 {
-	uint64_t *a1 = (uint64_t *)v1;
-	uint64_t *a2 = (uint64_t *)v2;
+	uint64_t *a1 = (uint64_t *) v1;
+	uint64_t *a2 = (uint64_t *) v2;
 
 	if (*a1 < *a2)
 		return -1;
@@ -800,10 +800,8 @@ int frmwk_gather_nics(void)
 	qsort(frmwk_nics, frmwk_numnics, NICSIZE, _compare);
 	TRACE("---\n");
 	for (i = 0; i < frmwk_numnics; i++)
-		TRACE("rank=%2d hsn=%d nic=%05x\n",
-		      frmwk_nics[i].rank,
-		      frmwk_nics[i].hsn,
-		      frmwk_nics[i].nic);
+		TRACE("rank=%2d hsn=%d nic=%05x\n", frmwk_nics[i].rank,
+		      frmwk_nics[i].hsn, frmwk_nics[i].nic);
 	return 0;
 
 fail:
@@ -816,11 +814,10 @@ fail:
 /* User call for the address of rank, hsn */
 int frmwk_nic_addr(int rank, int hsn)
 {
-	if (!frmwk_nics ||
-	    rank < 0 || rank >= frmwk_numranks ||
-	    hsn < 0 || hsn >= frmwk_nics_per_rank)
+	if (!frmwk_nics || rank < 0 || rank >= frmwk_numranks || hsn < 0 ||
+	    hsn >= frmwk_nics_per_rank)
 		return -1;
-	return (long)frmwk_nics[rank * frmwk_nics_per_rank + hsn].nic;
+	return (long) frmwk_nics[rank * frmwk_nics_per_rank + hsn].nic;
 }
 
 /* Get environment variable as string representation of int */
@@ -849,7 +846,7 @@ void frmwk_init(bool quiet)
 	 * We only want the first, e.g. newton9-node-01
 	 */
 	s = getenv("SLURM_NODELIST");
-	d = (char *)frmwk_node0;
+	d = (char *) frmwk_node0;
 	while (s && *s && *s != ',') {
 		if (*s == '[') {
 			s++;
@@ -868,14 +865,9 @@ void frmwk_init(bool quiet)
 	frmwk_mcast_token = getenv("FI_CXI_COLL_MCAST_TOKEN");
 	frmwk_fabric_mgr_url = getenv("FI_CXI_COLL_FABRIC_MGR_URL");
 	frmwk_hwcoll_min_nodes = getenv_int("FI_CXI_HWCOLL_MIN_NODES");
-	frmwk_hwcoll_addrs_per_job = getenv_int(
-					"FI_CXI_HWCOLL_ADDRS_PER_JOB");
-	if (!frmwk_nodename ||
-	    frmwk_numranks < 1 ||
-	    frmwk_rank < 0 ||
-	    !frmwk_jobid ||
-	    !frmwk_jobstep ||
-	    frmwk_hwcoll_min_nodes < 1 ||
+	frmwk_hwcoll_addrs_per_job = getenv_int("FI_CXI_HWCOLL_ADDRS_PER_JOB");
+	if (!frmwk_nodename || frmwk_numranks < 1 || frmwk_rank < 0 ||
+	    !frmwk_jobid || !frmwk_jobstep || frmwk_hwcoll_min_nodes < 1 ||
 	    frmwk_hwcoll_addrs_per_job < 1) {
 		if (quiet)
 			goto fail;

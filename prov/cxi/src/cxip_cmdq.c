@@ -2,6 +2,7 @@
  * Copyright (c) 2023 Hewlett Packard Enterprise Development LP
  * SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only
  */
+#include "config.h"
 #include "cxip.h"
 
 #define CXIP_DBG(...) _CXIP_DBG(FI_LOG_DOMAIN, __VA_ARGS__)

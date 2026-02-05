@@ -78,11 +78,11 @@ void cxit_setup_domain(void);
 void cxit_teardown_domain(void);
 void cxit_setup_ep(void);
 void cxit_teardown_ep(void);
-#define cxit_setup_eq cxit_setup_ep
+#define cxit_setup_eq	 cxit_setup_ep
 #define cxit_teardown_eq cxit_teardown_ep
-#define cxit_setup_cq cxit_setup_ep
+#define cxit_setup_cq	 cxit_setup_ep
 #define cxit_teardown_cq cxit_teardown_ep
-#define cxit_setup_av cxit_setup_ep
+#define cxit_setup_av	 cxit_setup_ep
 #define cxit_teardown_av cxit_teardown_ep
 void cxit_setup_enabled_ep(void);
 void cxit_setup_enabled_ep_fd(void);
@@ -90,17 +90,21 @@ void cxit_setup_enabled_rnr_ep_fd(void);
 void cxit_setup_enabled_ep_eq_yield(void);
 void cxit_setup_rma(void);
 void cxit_setup_rma_fd(void);
+void cxit_setup_writedata(void);
+void cxit_teardown_writedata(void);
+void cxit_setup_writedata_opt(void);
+void cxit_teardown_writedata_opt(void);
 void cxit_setup_rma_hybrid_mr_desc(void);
 void cxit_setup_rma_rnr_hybrid_mr_desc(void);
 void cxit_setup_rma_rnr_hybrid_mr_desc_byte_cntr(void);
 void cxit_setup_rma_mr_events(void);
 #define cxit_setup_tagged cxit_setup_rma
-#define cxit_setup_msg cxit_setup_rma
+#define cxit_setup_msg	  cxit_setup_rma
 void cxit_teardown_rma(void);
-#define cxit_teardown_tagged cxit_teardown_rma
-#define cxit_teardown_msg cxit_teardown_rma
-#define	cxit_teardown_enabled_ep cxit_teardown_rma
-#define cxit_teardown_rma_fd cxit_teardown_rma
+#define cxit_teardown_tagged	 cxit_teardown_rma
+#define cxit_teardown_msg	 cxit_teardown_rma
+#define cxit_teardown_enabled_ep cxit_teardown_rma
+#define cxit_teardown_rma_fd	 cxit_teardown_rma
 void cxit_setup_tx_alias_rma(void);
 void cxit_setup_tx_alias_rma_dc(void);
 #define cxit_setup_tx_alias_tagged cxit_setup_tx_alias_rma
@@ -115,9 +119,9 @@ void validate_rx_event(struct fi_cq_tagged_entry *cqe, void *context,
 void validate_rx_event_mask(struct fi_cq_tagged_entry *cqe, void *context,
 			    size_t len, uint64_t flags, void *buf,
 			    uint64_t data, uint64_t tag, uint64_t ignore);
-void validate_multi_recv_rx_event(struct fi_cq_tagged_entry *cqe,
-				  void *context, size_t len, uint64_t flags,
-				  uint64_t data, uint64_t tag);
+void validate_multi_recv_rx_event(struct fi_cq_tagged_entry *cqe, void *context,
+				  size_t len, uint64_t flags, uint64_t data,
+				  uint64_t tag);
 
 struct mem_region {
 	uint8_t *mem;
@@ -126,8 +130,13 @@ struct mem_region {
 
 int mr_create_ext(size_t len, uint64_t access, uint8_t seed, uint64_t *key,
 		  struct fid_cntr *cntr, struct mem_region *mr);
+int mr_create_ext_flags(size_t len, uint64_t access, uint8_t seed,
+			uint64_t *key, struct fid_cntr *cntr, uint64_t flags,
+			struct mem_region *mr);
 int mr_create(size_t len, uint64_t access, uint8_t seed, uint64_t *key,
 	      struct mem_region *mr);
+int mr_create_writedata(size_t len, uint64_t access, uint8_t seed,
+			uint64_t *key, struct mem_region *mr);
 void mr_destroy(struct mem_region *mr);
 
 struct cxit_coll_mc_list {
@@ -140,7 +149,12 @@ extern struct cxit_coll_mc_list cxit_coll_mc_list;
 void set_amo_remap_to_pcie_fadd(int amo_remap_to_pcie_fadd);
 void reset_amo_remap_to_pcie_fadd(void);
 
-int cxit_dom_read_cntr(unsigned int cntr, uint64_t *value,
-		       struct timespec *ts, bool sync);
+int cxit_dom_read_cntr(unsigned int cntr, uint64_t *value, struct timespec *ts,
+		       bool sync);
+
+/* Writedata stats helper - gets EP extension ops and retrieves stats */
+int cxit_get_writedata_stats(struct fid_ep *ep,
+			     struct fi_cxi_writedata_stats *stats);
+int cxit_reset_writedata_stats(struct fid_ep *ep);
 
 #endif

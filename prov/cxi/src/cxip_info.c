@@ -6,10 +6,10 @@
 
 /* CXI fabric discovery implementation. */
 
-#include "ofi_prov.h"
 #include "cxip.h"
+#include "ofi_prov.h"
 
-#define CXIP_DBG(...) _CXIP_DBG(FI_LOG_FABRIC, __VA_ARGS__)
+#define CXIP_DBG(...)  _CXIP_DBG(FI_LOG_FABRIC, __VA_ARGS__)
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_FABRIC, __VA_ARGS__)
 #define CXIP_INFO(...) _CXIP_INFO(FI_LOG_FABRIC, __VA_ARGS__)
 bool cxip_collectives_supported = true;
@@ -451,7 +451,7 @@ static int cxip_info_alloc(struct cxip_if *nic_if, int info_index,
 	return FI_SUCCESS;
 
 err:
-	fi_freeinfo((void *)fi);
+	fi_freeinfo((void *) fi);
 	return ret;
 }
 
@@ -460,15 +460,15 @@ err:
  */
 static int cxip_info_init(void)
 {
-	struct slist_entry *entry, *prev __attribute__ ((unused));
+	struct slist_entry *entry, *prev __attribute__((unused));
 	struct cxip_if *tmp;
 	struct cxip_if *nic_if;
-	struct fi_info **fi_list = (void *)&cxip_util_prov.info;
+	struct fi_info **fi_list = (void *) &cxip_util_prov.info;
 	struct fi_info *fi;
 	int ndx;
 	int ret;
 
-	slist_foreach(&cxip_if_list, entry, prev) {
+	slist_foreach (&cxip_if_list, entry, prev) {
 		/* Bit hacky... but use cxip_if list entry as input to
 		 * cxip_get_if(). cxip_get_if() will init a cxil_dev which is
 		 * used to build a NIC info.
@@ -509,8 +509,8 @@ static int cxip_info_init(void)
 
 			fi->caps |= FI_DIRECTED_RECV;
 			fi->ep_attr->protocol = FI_PROTO_CXI_RNR;
-			fi->ep_attr->mem_tag_format = FI_TAG_GENERIC >>
-					(64 - CXIP_CS_TAG_WIDTH);
+			fi->ep_attr->mem_tag_format =
+				FI_TAG_GENERIC >> (64 - CXIP_CS_TAG_WIDTH);
 			fi->tx_attr->msg_order = CXIP_MSG_ORDER & ~FI_ORDER_SAS;
 			fi->tx_attr->caps |= FI_DIRECTED_RECV;
 			/* Support IDC but not FI_INJECT */
@@ -531,7 +531,7 @@ static int cxip_info_init(void)
 	return FI_SUCCESS;
 
 free_info:
-	fi_freeinfo((void *)cxip_util_prov.info);
+	fi_freeinfo((void *) cxip_util_prov.info);
 	return ret;
 }
 
@@ -595,7 +595,7 @@ static int cxip_env_validate_url(const char *url)
 	return -FI_EINVAL;
 }
 
-static const char * const cxip_rdzv_proto_strs[] = {
+static const char *const cxip_rdzv_proto_strs[] = {
 	[CXIP_RDZV_PROTO_DEFAULT] = "default",
 	[CXIP_RDZV_PROTO_ALT_READ] = "alt_read",
 	[CXIP_RDZV_PROTO_ALT_WRITE] = "alt_write",
@@ -630,7 +630,7 @@ struct cxip_environment cxip_env = {
 	.oflow_buf_size = CXIP_OFLOW_BUF_SIZE,
 	.oflow_buf_min_posted = CXIP_OFLOW_BUF_MIN_POSTED,
 	.oflow_buf_max_cached = CXIP_OFLOW_BUF_MAX_CACHED,
-	.safe_devmem_copy_threshold =  CXIP_SAFE_DEVMEM_COPY_THRESH,
+	.safe_devmem_copy_threshold = CXIP_SAFE_DEVMEM_COPY_THRESH,
 	.optimized_mrs = true,
 	.mr_match_events = false,
 	.prov_key_cache = true,
@@ -683,6 +683,9 @@ struct cxip_environment cxip_env = {
 	.force_dev_reg_copy = false,
 	.mr_target_ordering = MR_ORDER_DEFAULT,
 	.disable_cuda_sync_memops = false,
+	.disable_writedata = false,
+	.writedata_atomic_threshold = CXIP_WRITEDATA_ATOMIC_THRESHOLD,
+	.writedata_prefer_flush = false,
 };
 
 static void cxip_env_init(void)
@@ -693,8 +696,9 @@ static void cxip_env_init(void)
 
 	gethostname(cxip_env.hostname, sizeof(cxip_env.hostname));
 
-	fi_param_define(&cxip_prov, "rget_tc", FI_PARAM_STRING,
-			"Traffic class used for software initiated rendezvous gets.");
+	fi_param_define(
+		&cxip_prov, "rget_tc", FI_PARAM_STRING,
+		"Traffic class used for software initiated rendezvous gets.");
 	fi_param_get_str(&cxip_prov, "rget_tc", &param_str);
 
 	if (param_str) {
@@ -780,8 +784,7 @@ static void cxip_env_init(void)
 		CXIP_INFO("Forcing ODP usage enabled ODP mode\n");
 	}
 
-	fi_param_define(&cxip_prov, "ats", FI_PARAM_BOOL,
-			"Enables PCIe ATS.");
+	fi_param_define(&cxip_prov, "ats", FI_PARAM_BOOL, "Enables PCIe ATS.");
 	fi_param_get_bool(&cxip_prov, "ats", &cxip_env.ats);
 
 	fi_param_define(&cxip_prov, "iotlb", FI_PARAM_BOOL,
@@ -791,14 +794,16 @@ static void cxip_env_init(void)
 	/* Use ROCR DMABUF by default - honors the env if already set */
 	ret = setenv("FI_HMEM_ROCR_USE_DMABUF", "1", 0);
 	if (ret)
-		CXIP_INFO("Could not enable FI_HMEM_ROCR_USE_DMABUF ret:%d %s\n",
-			  ret, fi_strerror(errno));
+		CXIP_INFO(
+			"Could not enable FI_HMEM_ROCR_USE_DMABUF ret:%d %s\n",
+			ret, fi_strerror(errno));
 
 	/* Use cuda DMABUF by default - honors the env if already set */
 	ret = setenv("FI_HMEM_CUDA_USE_DMABUF", "1", 0);
 	if (ret)
-		CXIP_INFO("Could not enable FI_HMEM_CUDA_USE_DMABUF ret:%d %s\n",
-			  ret, fi_strerror(errno));
+		CXIP_INFO(
+			"Could not enable FI_HMEM_CUDA_USE_DMABUF ret:%d %s\n",
+			ret, fi_strerror(errno));
 
 	fi_param_define(&cxip_prov, "ats_mlock_mode", FI_PARAM_STRING,
 			"Sets ATS mlock mode (off | all).");
@@ -815,14 +820,17 @@ static void cxip_env_init(void)
 		param_str = NULL;
 	}
 
-	fi_param_define(&cxip_prov, "device_name", FI_PARAM_STRING,
-			"Restrict CXI provider to specific CXI devices. Format is a comma separated list of CXI devices (e.g. cxi0,cxi1).");
+	fi_param_define(
+		&cxip_prov, "device_name", FI_PARAM_STRING,
+		"Restrict CXI provider to specific CXI devices. Format is a "
+		"comma separated list of CXI devices (e.g. cxi0,cxi1).");
 	fi_param_get_str(&cxip_prov, "device_name", &cxip_env.device_name);
 
 	if (cxip_env.device_name) {
 		ret = cxip_env_validate_device_name(cxip_env.device_name);
 		if (ret) {
-			CXIP_WARN("Failed to validate device name: name=%s rc=%d. Ignoring device name.\n",
+			CXIP_WARN("Failed to validate device name: name=%s "
+				  "rc=%d. Ignoring device name.\n",
 				  cxip_env.device_name, ret);
 			cxip_env.device_name = NULL;
 		}
@@ -838,26 +846,31 @@ static void cxip_env_init(void)
 	 * is used.
 	 */
 	fi_param_define(&cxip_prov, "telemetry", FI_PARAM_STRING,
-			"Perform a telemetry delta captured between fi_domain open and close. "
-			"Format is a comma separated list of telemetry files as defined in /sys/class/cxi/cxi*/device/telemetry/. "
+			"Perform a telemetry delta captured between fi_domain "
+			"open and close. "
+			"Format is a comma separated list of telemetry files "
+			"as defined in /sys/class/cxi/cxi*/device/telemetry/. "
 			"Default is counter delta captured disabled.");
 	fi_param_get_str(&cxip_prov, "telemetry", &cxip_env.telemetry);
 
 	fi_param_define(&cxip_prov, "telemetry_rgid", FI_PARAM_INT,
-			"Resource group ID (RGID) to restrict the telemetry collection to. "
+			"Resource group ID (RGID) to restrict the telemetry "
+			"collection to. "
 			"Value less than 0 is no restrictions. "
 			"Default is no restrictions.");
 	fi_param_get_int(&cxip_prov, "telemetry_rgid",
 			 &cxip_env.telemetry_rgid);
 
-	fi_param_define(&cxip_prov, "rx_match_mode", FI_PARAM_STRING,
-			"Sets RX message match mode (hardware | software | hybrid).");
+	fi_param_define(
+		&cxip_prov, "rx_match_mode", FI_PARAM_STRING,
+		"Sets RX message match mode (hardware | software | hybrid).");
 
 	cxip_set_env_rx_match_mode();
 
-	fi_param_define(&cxip_prov, "rdzv_threshold", FI_PARAM_SIZE_T,
-			"Message size threshold for rendezvous protocol (default %lu).",
-			cxip_env.rdzv_threshold);
+	fi_param_define(
+		&cxip_prov, "rdzv_threshold", FI_PARAM_SIZE_T,
+		"Message size threshold for rendezvous protocol (default %lu).",
+		cxip_env.rdzv_threshold);
 	fi_param_get_size_t(&cxip_prov, "rdzv_threshold",
 			    &cxip_env.rdzv_threshold);
 
@@ -882,8 +895,7 @@ static void cxip_env_init(void)
 
 	fi_param_define(&cxip_prov, "rdzv_get_min", FI_PARAM_SIZE_T,
 			"Minimum rendezvous Get payload size.");
-	fi_param_get_size_t(&cxip_prov, "rdzv_get_min",
-			    &cxip_env.rdzv_get_min);
+	fi_param_get_size_t(&cxip_prov, "rdzv_get_min", &cxip_env.rdzv_get_min);
 
 	fi_param_define(&cxip_prov, "rdzv_eager_size", FI_PARAM_SIZE_T,
 			"Eager data size for rendezvous protocol.");
@@ -910,8 +922,7 @@ static void cxip_env_init(void)
 
 	if (cxip_env.rdzv_get_min >
 	    (cxip_env.oflow_buf_size - cxip_env.rdzv_threshold)) {
-		CXIP_WARN("Invalid rdzv_get_min: %lu\n",
-			  cxip_env.rdzv_get_min);
+		CXIP_WARN("Invalid rdzv_get_min: %lu\n", cxip_env.rdzv_get_min);
 		cxip_env.rdzv_get_min = 0;
 	}
 
@@ -932,8 +943,8 @@ static void cxip_env_init(void)
 			"Maximum number of overflow buffers cached.");
 	fi_param_get_size_t(&cxip_prov, "oflow_buf_max_cached",
 			    &cxip_env.oflow_buf_max_cached);
-	if (cxip_env.oflow_buf_max_cached && cxip_env.oflow_buf_max_cached <
-	    cxip_env.oflow_buf_min_posted) {
+	if (cxip_env.oflow_buf_max_cached &&
+	    cxip_env.oflow_buf_max_cached < cxip_env.oflow_buf_min_posted) {
 		cxip_env.oflow_buf_max_cached = cxip_env.oflow_buf_min_posted;
 		CXIP_WARN("Adjusted oflow buffer max cached to %lu\n",
 			  cxip_env.oflow_buf_max_cached);
@@ -948,8 +959,7 @@ static void cxip_env_init(void)
 
 	fi_param_define(&cxip_prov, "optimized_mrs", FI_PARAM_BOOL,
 			"Enables optimized memory regions.");
-	fi_param_get_bool(&cxip_prov, "optimized_mrs",
-			  &cxip_env.optimized_mrs);
+	fi_param_get_bool(&cxip_prov, "optimized_mrs", &cxip_env.optimized_mrs);
 
 	fi_param_define(&cxip_prov, "mr_match_events", FI_PARAM_BOOL,
 			"Enable MR match counting (default %lu).",
@@ -975,8 +985,7 @@ static void cxip_env_init(void)
 		else if (!strcmp(param_str, "never"))
 			cxip_env.llring_mode = CXIP_LLRING_NEVER;
 		else
-			CXIP_WARN("Unrecognized llring_mode: %s\n",
-				  param_str);
+			CXIP_WARN("Unrecognized llring_mode: %s\n", param_str);
 
 		param_str = NULL;
 	}
@@ -1004,18 +1013,19 @@ static void cxip_env_init(void)
 		else if (!strcmp(param_str, "low"))
 			cxip_env.cq_policy = CXI_CQ_UPDATE_LOW_FREQ;
 		else
-			CXIP_WARN("Unrecognized cq_policy: %s\n",
-				  param_str);
+			CXIP_WARN("Unrecognized cq_policy: %s\n", param_str);
 
 		param_str = NULL;
 	}
 
 	fi_param_define(&cxip_prov, "default_vni", FI_PARAM_SIZE_T,
-			"Default VNI value used only for service IDs where the VNI is not restricted.");
+			"Default VNI value used only for service IDs where the "
+			"VNI is not restricted.");
 	fi_param_get_size_t(&cxip_prov, "default_vni", &cxip_env.default_vni);
 
-	fi_param_define(&cxip_prov, "eq_ack_batch_size", FI_PARAM_SIZE_T,
-			"Number of EQ events to process before acknowledgement");
+	fi_param_define(
+		&cxip_prov, "eq_ack_batch_size", FI_PARAM_SIZE_T,
+		"Number of EQ events to process before acknowledgement");
 	fi_param_get_size_t(&cxip_prov, "eq_ack_batch_size",
 			    &cxip_env.eq_ack_batch_size);
 
@@ -1031,9 +1041,10 @@ static void cxip_env_init(void)
 			cxip_env.req_buf_size);
 	fi_param_get_size_t(&cxip_prov, "req_buf_size", &cxip_env.req_buf_size);
 
-	fi_param_define(&cxip_prov, "req_buf_min_posted", FI_PARAM_SIZE_T,
-			"Minimum number of request buffer posted (default %lu).",
-			cxip_env.req_buf_min_posted);
+	fi_param_define(
+		&cxip_prov, "req_buf_min_posted", FI_PARAM_SIZE_T,
+		"Minimum number of request buffer posted (default %lu).",
+		cxip_env.req_buf_min_posted);
 	fi_param_get_size_t(&cxip_prov, "req_buf_min_posted",
 			    &cxip_env.req_buf_min_posted);
 
@@ -1049,11 +1060,12 @@ static void cxip_env_init(void)
 
 	if (cxip_software_pte_allowed(cxip_env.rx_match_mode)) {
 		min_free = CXIP_REQ_BUF_HEADER_MAX_SIZE +
-			cxip_env.rdzv_threshold + cxip_env.rdzv_get_min;
+			   cxip_env.rdzv_threshold + cxip_env.rdzv_get_min;
 
 		if (cxip_env.req_buf_size < min_free) {
 			cxip_env.req_buf_size = min_free;
-			CXIP_WARN("Requested request buffer size to small. Setting to %lu bytes\n",
+			CXIP_WARN("Requested request buffer size to small. "
+				  "Setting to %lu bytes\n",
 				  cxip_env.req_buf_size);
 		}
 
@@ -1067,14 +1079,15 @@ static void cxip_env_init(void)
 		if (cxip_env.req_buf_max_cached &&
 		    cxip_env.req_buf_max_cached < cxip_env.req_buf_min_posted) {
 			cxip_env.req_buf_max_cached =
-					cxip_env.req_buf_min_posted;
+				cxip_env.req_buf_min_posted;
 			CXIP_WARN("Adjusted request buffer max cached to %lu\n",
 				  cxip_env.req_buf_max_cached);
 		}
 	}
 
 	fi_param_define(&cxip_prov, "fc_retry_usec_delay", FI_PARAM_INT,
-			"Micro-second delay before retrying failed flow-control messages. Default: %d usecs",
+			"Micro-second delay before retrying failed "
+			"flow-control messages. Default: %d usecs",
 			cxip_env.fc_retry_usec_delay);
 	fi_param_get_int(&cxip_prov, "fc_retry_usec_delay",
 			 &cxip_env.fc_retry_usec_delay);
@@ -1085,7 +1098,8 @@ static void cxip_env_init(void)
 	}
 
 	fi_param_define(&cxip_prov, "cntr_spin_before_yield", FI_PARAM_INT,
-			"Number of times to spin in counter operations before yielding. Default: %d",
+			"Number of times to spin in counter operations before "
+			"yielding. Default: %d",
 			cxip_env.cntr_spin_before_yield);
 	fi_param_get_int(&cxip_prov, "cntr_spin_before_yield",
 			 &cxip_env.cntr_spin_before_yield);
@@ -1102,7 +1116,8 @@ static void cxip_env_init(void)
 	}
 
 	fi_param_define(&cxip_prov, "ctrl_rx_eq_max_size", FI_PARAM_SIZE_T,
-			"Control receive event queue max size. Values are aligned up to 4KiB. Default: %lu bytes",
+			"Control receive event queue max size. Values are "
+			"aligned up to 4KiB. Default: %lu bytes",
 			cxip_env.ctrl_rx_eq_max_size);
 	fi_param_get_size_t(&cxip_prov, "ctrl_rx_eq_max_size",
 			    &cxip_env.ctrl_rx_eq_max_size);
@@ -1122,81 +1137,84 @@ static void cxip_env_init(void)
 	 * FI_CXI_DISABLE_CQ_HUGETLB, both are allowed for now.
 	 */
 	fi_param_define(&cxip_prov, "disable_cq_hugetlb", FI_PARAM_BOOL,
-			"Disable 2MiB hugetlb allocates for HW event queues (default: %u).",
+			"Disable 2MiB hugetlb allocates for HW event queues "
+			"(default: %u).",
 			cxip_env.disable_eq_hugetlb);
 	fi_param_get_bool(&cxip_prov, "disable_cq_hugetlb",
 			  &cxip_env.disable_eq_hugetlb);
 	fi_param_define(&cxip_prov, "disable_eq_hugetlb", FI_PARAM_BOOL,
-			"Disable 2MiB hugetlb allocates for HW event queues (default: %u).",
+			"Disable 2MiB hugetlb allocates for HW event queues "
+			"(default: %u).",
 			cxip_env.disable_eq_hugetlb);
 	fi_param_get_bool(&cxip_prov, "disable_eq_hugetlb",
 			  &cxip_env.disable_eq_hugetlb);
 
-	fi_param_define(&cxip_prov, "cq_fill_percent", FI_PARAM_SIZE_T,
-			"Fill percent of underlying hardware event queue used to determine when completion queue is saturated (default: %lu).",
-			cxip_env.cq_fill_percent);
+	fi_param_define(
+		&cxip_prov, "cq_fill_percent", FI_PARAM_SIZE_T,
+		"Fill percent of underlying hardware event queue used to "
+		"determine when completion queue is saturated (default: %lu).",
+		cxip_env.cq_fill_percent);
 	fi_param_get_size_t(&cxip_prov, "cq_fill_percent",
 			    &cxip_env.cq_fill_percent);
 
-	if (cxip_env.cq_fill_percent < 1 ||
-	    cxip_env.cq_fill_percent > 100) {
+	if (cxip_env.cq_fill_percent < 1 || cxip_env.cq_fill_percent > 100) {
 		cxip_env.cq_fill_percent = 50;
 		CXIP_WARN("CQ fill percent invalid. Setting to %lu.\n",
 			  cxip_env.cq_fill_percent);
 	}
 
 	fi_param_define(&cxip_prov, "coll_job_id", FI_PARAM_STRING,
-		"Collective job identifier (default %s).",
-		cxip_env.coll_job_id);
-	fi_param_get_str(&cxip_prov, "coll_job_id",
-			  &cxip_env.coll_job_id);
+			"Collective job identifier (default %s).",
+			cxip_env.coll_job_id);
+	fi_param_get_str(&cxip_prov, "coll_job_id", &cxip_env.coll_job_id);
 
 	fi_param_define(&cxip_prov, "coll_job_step_id", FI_PARAM_STRING,
-		"Collective job-step identifier (default %s).",
-		cxip_env.coll_job_step_id);
+			"Collective job-step identifier (default %s).",
+			cxip_env.coll_job_step_id);
 	fi_param_get_str(&cxip_prov, "coll_job_step_id",
-			  &cxip_env.coll_job_step_id);
+			 &cxip_env.coll_job_step_id);
 
 	fi_param_define(&cxip_prov, "coll_fabric_mgr_url", FI_PARAM_STRING,
-		"Fabric multicast REST API URL (default %s).",
-		cxip_env.coll_fabric_mgr_url);
+			"Fabric multicast REST API URL (default %s).",
+			cxip_env.coll_fabric_mgr_url);
 	fi_param_get_str(&cxip_prov, "coll_fabric_mgr_url",
-			  &cxip_env.coll_fabric_mgr_url);
+			 &cxip_env.coll_fabric_mgr_url);
 	if (cxip_env.coll_fabric_mgr_url) {
 		ret = cxip_env_validate_url(cxip_env.coll_fabric_mgr_url);
 		if (ret) {
-			CXIP_WARN("Failed to validate fabric multicast URL: name=%s rc=%d. Ignoring URL.\n",
+			CXIP_WARN("Failed to validate fabric multicast URL: "
+				  "name=%s rc=%d. Ignoring URL.\n",
 				  cxip_env.coll_fabric_mgr_url, ret);
 			cxip_env.coll_fabric_mgr_url = NULL;
 		}
 	}
 
 	fi_param_define(&cxip_prov, "coll_mcast_token", FI_PARAM_STRING,
-		"Fabric multicast REST API TOKEN (default none).",
-		cxip_env.coll_mcast_token);
+			"Fabric multicast REST API TOKEN (default none).",
+			cxip_env.coll_mcast_token);
 	fi_param_get_str(&cxip_prov, "coll_mcast_token",
-			  &cxip_env.coll_mcast_token);
+			 &cxip_env.coll_mcast_token);
 
 	fi_param_define(&cxip_prov, "coll_use_dma_put", FI_PARAM_BOOL,
-		"Use DMA Put for collectives (default: %d).",
-		cxip_env.coll_use_dma_put);
+			"Use DMA Put for collectives (default: %d).",
+			cxip_env.coll_use_dma_put);
 	fi_param_get_bool(&cxip_prov, "coll_use_dma_put",
 			  &cxip_env.coll_use_dma_put);
 
 	fi_param_define(&cxip_prov, "hwcoll_addrs_per_job", FI_PARAM_SIZE_T,
-		"Maximum hardware collective addresses allowed.");
+			"Maximum hardware collective addresses allowed.");
 	fi_param_get_size_t(&cxip_prov, "hwcoll_addrs_per_job",
 			    &cxip_env.hwcoll_addrs_per_job);
 
 	fi_param_define(&cxip_prov, "hwcoll_min_nodes", FI_PARAM_SIZE_T,
-		"Minimum number of nodes required for hwcoll.");
+			"Minimum number of nodes required for hwcoll.");
 	fi_param_get_size_t(&cxip_prov, "hwcoll_min_nodes",
 			    &cxip_env.hwcoll_min_nodes);
 
 	fi_param_define(&cxip_prov, "coll_retry_usec", FI_PARAM_SIZE_T,
-		"Retry period (usec) (default %d, min %d, max %d).",
-		cxip_env.coll_retry_usec, CXIP_COLL_MIN_RETRY_USEC,
-		CXIP_COLL_MAX_RETRY_USEC);
+			"Retry period (usec) (default %d, min %d, max %d).",
+			cxip_env.coll_retry_usec, CXIP_COLL_MIN_RETRY_USEC,
+			CXIP_COLL_MAX_RETRY_USEC);
 	fi_param_get_size_t(&cxip_prov, "coll_retry_usec",
 			    &cxip_env.coll_retry_usec);
 	if (cxip_env.coll_retry_usec < CXIP_COLL_MIN_RETRY_USEC)
@@ -1204,7 +1222,8 @@ static void cxip_env_init(void)
 	if (cxip_env.coll_retry_usec > CXIP_COLL_MAX_RETRY_USEC)
 		cxip_env.coll_retry_usec = CXIP_COLL_MAX_RETRY_USEC;
 
-	fi_param_define(&cxip_prov, "coll_timeout_usec", FI_PARAM_SIZE_T,
+	fi_param_define(
+		&cxip_prov, "coll_timeout_usec", FI_PARAM_SIZE_T,
 		"Reduction tree timeout (usec) (default %d, min %d, max %d).",
 		cxip_env.coll_timeout_usec, CXIP_COLL_MIN_TIMEOUT_USEC,
 		CXIP_COLL_MAX_TIMEOUT_USEC);
@@ -1240,7 +1259,8 @@ static void cxip_env_init(void)
 	}
 
 	fi_param_define(&cxip_prov, "disable_hmem_dev_register", FI_PARAM_BOOL,
-			"Disable registering HMEM device buffer for load/store access (default: %u).",
+			"Disable registering HMEM device buffer for load/store "
+			"access (default: %u).",
 			cxip_env.disable_hmem_dev_register);
 	fi_param_get_bool(&cxip_prov, "disable_hmem_dev_register",
 			  &cxip_env.disable_hmem_dev_register);
@@ -1249,7 +1269,8 @@ static void cxip_env_init(void)
 	 * override just in case these checks become invalid.
 	 */
 	fi_param_define(&cxip_prov, "force_ze_hmem_support", FI_PARAM_BOOL,
-			"Disable ZE implicit scaling and KDM checks and force ZE HMEM support.");
+			"Disable ZE implicit scaling and KDM checks and force "
+			"ZE HMEM support.");
 	fi_param_get_bool(&cxip_prov, "force_ze_hmem_support",
 			  &cxip_env.ze_hmem_supported);
 
@@ -1269,7 +1290,8 @@ static void cxip_env_init(void)
 	fi_param_get_bool(&cxip_prov, "trunc_ok", &cxip_env.trunc_ok);
 
 	fi_param_define(&cxip_prov, "rdzv_proto", FI_PARAM_STRING,
-			"Sets preferred rendezvous protocol [default | alt_read] (default %s).",
+			"Sets preferred rendezvous protocol [default | "
+			"alt_read] (default %s).",
 			cxip_rdzv_proto_to_str(cxip_env.rdzv_proto));
 	fi_param_get_str(&cxip_prov, "rdzv_proto", &param_str);
 
@@ -1309,15 +1331,20 @@ static void cxip_env_init(void)
 	fi_param_get_bool(&cxip_prov, "cntr_trig_cmdq",
 			  &cxip_env.cntr_trig_cmdq);
 
-	fi_param_define(&cxip_prov, "mr_cache_events_disable_poll_nsecs", FI_PARAM_SIZE_T,
-			"Max amount of time to poll when disabling an MR configured with MR match events (default: %lu).",
+	fi_param_define(&cxip_prov, "mr_cache_events_disable_poll_nsecs",
+			FI_PARAM_SIZE_T,
+			"Max amount of time to poll when disabling an MR "
+			"configured with MR match events (default: %lu).",
 			cxip_env.mr_cache_events_disable_poll_nsecs);
 	fi_param_get_size_t(&cxip_prov, "mr_cache_events_disable_poll_nsecs",
 			    &cxip_env.mr_cache_events_disable_poll_nsecs);
 
-	fi_param_define(&cxip_prov, "mr_cache_events_disable_le_poll_nsecs", FI_PARAM_SIZE_T,
-			"Max amount of time to poll when LE invalidate disabling an MR configured with MR match events (default: %lu).",
-			cxip_env.mr_cache_events_disable_le_poll_nsecs);
+	fi_param_define(
+		&cxip_prov, "mr_cache_events_disable_le_poll_nsecs",
+		FI_PARAM_SIZE_T,
+		"Max amount of time to poll when LE invalidate disabling an MR "
+		"configured with MR match events (default: %lu).",
+		cxip_env.mr_cache_events_disable_le_poll_nsecs);
 	fi_param_get_size_t(&cxip_prov, "mr_cache_events_disable_le_poll_nsecs",
 			    &cxip_env.mr_cache_events_disable_le_poll_nsecs);
 
@@ -1328,7 +1355,9 @@ static void cxip_env_init(void)
 			  &cxip_env.force_dev_reg_copy);
 
 	fi_param_define(&cxip_prov, "mr_target_ordering", FI_PARAM_STRING,
-			"MR target ordering (i.e. PCI ordering). Options: default, strict, or relaxed. Recommendation is to leave at default behavior.");
+			"MR target ordering (i.e. PCI ordering). Options: "
+			"default, strict, or relaxed. Recommendation is to "
+			"leave at default behavior.");
 	fi_param_get_str(&cxip_prov, "mr_target_ordering", &param_str);
 
 	if (param_str) {
@@ -1351,6 +1380,44 @@ static void cxip_env_init(void)
 	fi_param_get_bool(&cxip_prov, "disable_cuda_sync_memops",
 			  &cxip_env.disable_cuda_sync_memops);
 
+	/*
+	 * Writedata (fi_writedata) configuration.
+	 *
+	 * These parameters control the behavior of fi_writedata() operations
+	 * which deliver both data and immediate data to a remote MR.
+	 */
+	fi_param_define(
+		&cxip_prov, "disable_writedata", FI_PARAM_BOOL,
+		"Disable fi_writedata() support entirely. When set, "
+		"fi_writedata() returns -FI_EOPNOTSUPP and no writedata "
+		"PTE is allocated. Reduces overhead for applications "
+		"that don't use writedata. Default: %d",
+		cxip_env.disable_writedata);
+	fi_param_get_bool(&cxip_prov, "disable_writedata",
+			  &cxip_env.disable_writedata);
+
+	fi_param_define(
+		&cxip_prov, "writedata_atomic_threshold", FI_PARAM_SIZE_T,
+		"Size threshold for writedata single-PUT optimization. "
+		"Messages <= threshold use single unrestricted PUT "
+		"(standard MRs only, avoids two-PUT race). "
+		"Messages > threshold use two-PUT protocol. "
+		"Set to 0 to disable single-PUT mode. Default: %lu bytes.",
+		cxip_env.writedata_atomic_threshold);
+	fi_param_get_size_t(&cxip_prov, "writedata_atomic_threshold",
+			    &cxip_env.writedata_atomic_threshold);
+
+	fi_param_define(
+		&cxip_prov, "writedata_prefer_flush", FI_PARAM_BOOL,
+		"Force FLUSH mode for fi_writedata() even when "
+		"hardware-sequenced TRIGGERED mode is available. "
+		"TRIGGERED mode uses CT thresholds for better performance. "
+		"FLUSH mode uses software tracking with unrestricted PUT "
+		"ordering. Useful for debugging. Default: %d",
+		cxip_env.writedata_prefer_flush);
+	fi_param_get_bool(&cxip_prov, "writedata_prefer_flush",
+			  &cxip_env.writedata_prefer_flush);
+
 	set_system_page_size();
 }
 
@@ -1361,14 +1428,16 @@ CXI_INI
 {
 	int ret = 0;
 	cxip_env_init();
-	/* 
-	 * Check to see if we had any issues when binding the curl symbols or during multi init
-	 * If we failed, then collective support will be removed from the CXI provider fi_info
+	/*
+	 * Check to see if we had any issues when binding the curl symbols or
+	 * during multi init If we failed, then collective support will be
+	 * removed from the CXI provider fi_info
 	 */
 	ret = cxip_curl_init();
-	if(ret != FI_SUCCESS) {
+	if (ret != FI_SUCCESS) {
 		CXIP_WARN("cxip_curl_init() failed!\n");
-		CXIP_WARN("removing collective support from CXI prov fi_getinfo()\n");
+		CXIP_WARN("removing collective support from CXI prov "
+			  "fi_getinfo()\n");
 		cxip_collectives_supported = false;
 	}
 
@@ -1388,7 +1457,7 @@ static void cxip_fini(void)
 {
 	cxip_fault_inject_fini();
 
-	fi_freeinfo((void *)cxip_util_prov.info);
+	fi_freeinfo((void *) cxip_util_prov.info);
 
 	cxip_if_fini();
 
@@ -1401,17 +1470,25 @@ static void cxip_alter_caps(struct fi_info *info, const struct fi_info *hints)
 	 * FI_MSG for send and receive if not already enabled.
 	 */
 	if (hints && hints->caps && (hints->caps & FI_COLLECTIVE)) {
-		if(!cxip_collectives_supported) {
-			CXIP_WARN("Collectives are not supported - %s\n", __func__);
+		if (!cxip_collectives_supported) {
+			CXIP_WARN("Collectives are not supported - %s\n",
+				  __func__);
 			info->caps &= ~FI_COLLECTIVE;
 		} else if (!(info->caps & (FI_MSG | FI_TAGGED))) {
 			info->caps |= FI_MSG | FI_SEND | FI_RECV;
 			info->tx_attr->caps |= FI_MSG | FI_SEND;
 			info->rx_attr->caps |= FI_MSG | FI_RECV;
 		}
-
 	}
-	
+
+	/* FI_REMOTE_CQ_DATA is a secondary capability supported by CXI but is
+	 * not included in libfabric core's OFI_SECONDARY_CAPS, so
+	 * ofi_get_caps() strips it. Re-add it here so it's advertised by
+	 * default. The capability will be stripped later in cxip_getinfo() if
+	 * writedata is globally disabled via FI_CXI_DISABLE_WRITEDATA.
+	 */
+	info->caps |= FI_REMOTE_CQ_DATA;
+	info->tx_attr->caps |= FI_REMOTE_CQ_DATA;
 }
 
 static void cxip_alter_tx_attr(struct fi_tx_attr *attr,
@@ -1527,7 +1604,7 @@ static int cxip_alter_auth_key_validate(struct fi_info **info)
 		}
 
 		if (*info == NULL)
-				*info = fi_ptr;
+			*info = fi_ptr;
 
 		fi_prev_ptr = fi_ptr;
 		fi_ptr = fi_ptr->next;
@@ -1552,7 +1629,7 @@ int cxip_gen_auth_key(struct fi_info *info, struct cxi_auth_key *key)
 		return -FI_EINVAL;
 	}
 
-	nic_attr = (struct cxip_nic_attr *)info->nic->prov_attr;
+	nic_attr = (struct cxip_nic_attr *) info->nic->prov_attr;
 	if (nic_attr->default_rgroup_id == 0)
 		return -FI_ENOSYS;
 
@@ -1591,7 +1668,7 @@ int cxip_check_auth_key_info(struct fi_info *info)
 	struct cxip_if *iface;
 	int ret;
 
-	src_addr = (struct cxip_addr *)info->src_addr;
+	src_addr = (struct cxip_addr *) info->src_addr;
 	if (!src_addr) {
 		CXIP_WARN("NULL src_addr in fi_info\n");
 		return -FI_EINVAL;
@@ -1600,13 +1677,14 @@ int cxip_check_auth_key_info(struct fi_info *info)
 	ret = cxip_get_if(src_addr->nic, &iface);
 	if (ret) {
 		CXIP_WARN("cxip_get_if with NIC %#x failed: %d:%s\n",
-				src_addr->nic, ret, fi_strerror(-ret));
+			  src_addr->nic, ret, fi_strerror(-ret));
 		return ret;
 	}
 
 	if (info->domain_attr) {
-		ret = cxip_validate_iface_auth_key(iface,
-						   (struct cxi_auth_key *)info->domain_attr->auth_key);
+		ret = cxip_validate_iface_auth_key(
+			iface,
+			(struct cxi_auth_key *) info->domain_attr->auth_key);
 		if (ret) {
 			CXIP_WARN("Invalid domain auth_key\n");
 			goto err_put_if;
@@ -1614,8 +1692,8 @@ int cxip_check_auth_key_info(struct fi_info *info)
 	}
 
 	if (info->ep_attr) {
-		ret = cxip_validate_iface_auth_key(iface,
-						   (struct cxi_auth_key *)info->ep_attr->auth_key);
+		ret = cxip_validate_iface_auth_key(
+			iface, (struct cxi_auth_key *) info->ep_attr->auth_key);
 		if (ret) {
 			CXIP_WARN("Invalid endpoint auth_key\n");
 			goto err_put_if;
@@ -1635,10 +1713,9 @@ err_put_if:
 /*
  * cxip_getinfo() - Provider fi_getinfo() implementation.
  */
-static int
-cxip_getinfo(uint32_t version, const char *node, const char *service,
-	     uint64_t flags, const struct fi_info *hints,
-	     struct fi_info **info)
+static int cxip_getinfo(uint32_t version, const char *node, const char *service,
+			uint64_t flags, const struct fi_info *hints,
+			struct fi_info **info)
 {
 	int ret;
 	struct fi_info *fi_ptr;
@@ -1700,7 +1777,7 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 	 * and applications should use hints to pick the desired mode.
 	 */
 	if (!cxip_env.odp && hints && hints->domain_attr &&
-	    hints->domain_attr->mr_mode  == FI_MR_ENDPOINT) {
+	    hints->domain_attr->mr_mode == FI_MR_ENDPOINT) {
 		temp_hints = fi_dupinfo(hints);
 		if (!temp_hints)
 			return -FI_ENOMEM;
@@ -1712,8 +1789,7 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 
 	/* Find all matching domains, ignoring addresses. */
 	ret = util_getinfo(&cxip_util_prov, version, NULL, NULL, 0,
-			   temp_hints ? temp_hints : hints,
-			   info);
+			   temp_hints ? temp_hints : hints, info);
 	if (temp_hints)
 		fi_freeinfo(temp_hints);
 
@@ -1841,7 +1917,7 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 		if (flags & FI_SOURCE) {
 			/* Set client-assigned PID value in source address. */
 			if (service) {
-				addr = (struct cxip_addr *)fi_ptr->src_addr;
+				addr = (struct cxip_addr *) fi_ptr->src_addr;
 				addr->pid = scan_pid;
 			}
 
@@ -1853,8 +1929,8 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 				addr.nic = scan_nic;
 				addr.pid = scan_pid;
 
-				fi_ptr->dest_addr = mem_dup(&addr,
-							    sizeof(addr));
+				fi_ptr->dest_addr =
+					mem_dup(&addr, sizeof(addr));
 				if (!fi_ptr->dest_addr) {
 					ret = -FI_ENOMEM;
 					goto freeinfo;
@@ -1877,8 +1953,8 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 		}
 
 		if (copy_dest) {
-			fi_ptr->dest_addr = mem_dup(hints->dest_addr,
-						    hints->dest_addrlen);
+			fi_ptr->dest_addr =
+				mem_dup(hints->dest_addr, hints->dest_addrlen);
 			if (!fi_ptr->dest_addr) {
 				ret = -FI_ENOMEM;
 				goto freeinfo;
@@ -1891,6 +1967,17 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 	ret = cxip_alter_auth_key(hints, info);
 	if (ret)
 		goto freeinfo;
+
+	/* If writedata is globally disabled, remove FI_REMOTE_CQ_DATA from
+	 * all returned fi_info entries. This must happen before the hints
+	 * check so the capability is stripped even when no hints are provided.
+	 */
+	if (cxip_env.disable_writedata) {
+		for (fi_ptr = *info; fi_ptr; fi_ptr = fi_ptr->next) {
+			fi_ptr->caps &= ~FI_REMOTE_CQ_DATA;
+			fi_ptr->tx_attr->caps &= ~FI_REMOTE_CQ_DATA;
+		}
+	}
 
 	/* Nothing left to do if hints weren't provided. */
 	if (!hints)
@@ -1988,6 +2075,19 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 			fi_ptr->caps &= ~FI_HMEM;
 			fi_ptr->tx_attr->caps &= ~FI_HMEM;
 			fi_ptr->rx_attr->caps &= ~FI_HMEM;
+		}
+
+		/* If writedata is disabled and application explicitly requested
+		 * FI_REMOTE_CQ_DATA, fail with -FI_ENODATA. The capability was
+		 * already stripped earlier, but we need to fail if it was
+		 * explicitly required by the application.
+		 */
+		if (cxip_env.disable_writedata && hints->caps &&
+		    (hints->caps & FI_REMOTE_CQ_DATA)) {
+			CXIP_WARN("FI_REMOTE_CQ_DATA requested but writedata "
+				  "is disabled via FI_CXI_DISABLE_WRITEDATA\n");
+			ret = -FI_ENODATA;
+			goto freeinfo;
 		}
 	}
 

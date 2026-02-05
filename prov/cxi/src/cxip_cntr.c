@@ -51,7 +51,7 @@ static int cxip_cntr_copy_ct_writeback(struct cxip_cntr *cntr,
 	return FI_SUCCESS;
 }
 
-static int cxip_cntr_get_wb(struct cxip_cntr *cntr, struct c_ct_writeback *wb)
+int cxip_cntr_get_wb(struct cxip_cntr *cntr, struct c_ct_writeback *wb)
 {
 	int ret;
 

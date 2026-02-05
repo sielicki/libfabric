@@ -8,7 +8,7 @@
 #include "ofi_str.h"
 #include <sys/stat.h>
 
-#define CXIP_DBG(...) _CXIP_DBG(FI_LOG_FABRIC, __VA_ARGS__)
+#define CXIP_DBG(...)  _CXIP_DBG(FI_LOG_FABRIC, __VA_ARGS__)
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_FABRIC, __VA_ARGS__)
 #define CXIP_INFO(...) _CXIP_INFO(FI_LOG_FABRIC, __VA_ARGS__)
 
@@ -34,7 +34,7 @@ static int cxip_nic_get_ss_env_get_vni(void)
 	 */
 	token = strtok(vni_str_dup, ",");
 	if (token)
-		vni = (uint16_t)atoi(token);
+		vni = (uint16_t) atoi(token);
 	else
 		CXIP_WARN("VNI not found in SLINGSHOT_VNIS: %s\n", vni_str);
 
@@ -111,8 +111,9 @@ static int cxip_gen_auth_key_ss_env_get_svc_id(struct cxip_if *nic_if)
 	free(svc_id_str_dup);
 
 	if (!found) {
-		CXIP_WARN("Failed to find service ID in SLINGSHOT_SVC_IDS: %s\n",
-			  svc_id_str);
+		CXIP_WARN(
+			"Failed to find service ID in SLINGSHOT_SVC_IDS: %s\n",
+			svc_id_str);
 		return -FI_EINVAL;
 	}
 
@@ -158,7 +159,8 @@ static int cxip_process_network_namespace(unsigned int *netns)
 	struct stat st;
 
 	if (stat("/proc/self/ns/net", &st)) {
-		CXIP_WARN("failed to stat /proc/self/ns/net (no namespace support or none set?): %d:%s\n",
+		CXIP_WARN("failed to stat /proc/self/ns/net (no namespace "
+			  "support or none set?): %d:%s\n",
 			  errno, strerror(errno));
 		*netns = 0; /* invalid Namespace ID*/
 		return -1;
@@ -171,14 +173,16 @@ static int cxip_process_network_namespace(unsigned int *netns)
 }
 
 static int cxip_nic_get_best_rgroup_vni(struct cxip_if *nic_if,
-					unsigned int *rgroup,
-					unsigned int *vni)
+					unsigned int *rgroup, unsigned int *vni)
 {
 	int ret;
 	struct cxil_svc_list *svc_list;
 	uid_t uid;
 	gid_t gid;
-	unsigned int cur_netns, netns;
+	unsigned int cur_netns;
+#ifdef CXI_HAVE_SVC_GET_NETNS
+	unsigned int netns;
+#endif
 	int i;
 	int j;
 	struct cxi_svc_desc *desc;
@@ -191,7 +195,8 @@ static int cxip_nic_get_best_rgroup_vni(struct cxip_if *nic_if,
 	gid = getegid();
 	ret = cxip_process_network_namespace(&cur_netns);
 	if (ret)
-		CXIP_WARN("cxip_process_network_namespace failed, proceeding without network namespace support\n");
+		CXIP_WARN("cxip_process_network_namespace failed, proceeding "
+			  "without network namespace support\n");
 
 	ret = cxil_get_svc_list(nic_if->dev, &svc_list);
 	if (ret) {
@@ -201,9 +206,10 @@ static int cxip_nic_get_best_rgroup_vni(struct cxip_if *nic_if,
 	}
 
 	/* Find the service indexes which can be used by this process. These are
-	 * services which have no membership restrictions, or have a matching UID,
-	 * GID or The Network Namespace ID(NETNS).If there are multiple service
-	 * IDs which match uid, gid, and netns, the priority is netns, uid and then gid.
+	 * services which have no membership restrictions, or have a matching
+	 * UID, GID or The Network Namespace ID(NETNS).If there are multiple
+	 * service IDs which match uid, gid, and netns, the priority is netns,
+	 * uid and then gid.
 	 */
 	found_uid = -1;
 	found_gid = -1;
@@ -233,13 +239,19 @@ static int cxip_nic_get_best_rgroup_vni(struct cxip_if *nic_if,
 				found_gid = i;
 		}
 
-		/* Check if service ID created with netns type and matching with current Network Namespace ID */
+		/* Check if service ID created with netns type and matching with
+		 * current Network Namespace ID */
+#ifdef CXI_HAVE_SVC_GET_NETNS
 		if (cur_netns && found_netns == -1)
-			if (!cxil_svc_get_netns(nic_if->dev, desc->svc_id, &netns) && (netns == cur_netns))
+			if (!cxil_svc_get_netns(nic_if->dev, desc->svc_id,
+						&netns) &&
+			    (netns == cur_netns))
 				found_netns = i;
+#endif
 	}
 
-	/* The service ID matching with the netns is prioritized over service ID with uid or gid. */
+	/* The service ID matching with the netns is prioritized over service ID
+	 * with uid or gid. */
 	if (found_netns != -1) {
 		i = found_netns;
 	} else if (found_uid != -1) {
@@ -266,7 +278,7 @@ static int cxip_nic_get_best_rgroup_vni(struct cxip_if *nic_if,
 			return -FI_EINVAL;
 		}
 
-		*vni = (uint16_t)desc->vnis[0];
+		*vni = (uint16_t) desc->vnis[0];
 	} else {
 #ifdef CXI_HAVE_SVC_GET_VNI_RANGE
 		uint16_t vni_min;
@@ -278,7 +290,7 @@ static int cxip_nic_get_best_rgroup_vni(struct cxip_if *nic_if,
 			*vni = vni_min;
 		else
 #endif /* CXI_HAVE_SVC_GET_VNI_RANGE */
-			*vni = (uint16_t)cxip_env.default_vni;
+			*vni = (uint16_t) cxip_env.default_vni;
 	}
 
 	*rgroup = desc->svc_id;
@@ -290,8 +302,8 @@ static int cxip_nic_get_best_rgroup_vni(struct cxip_if *nic_if,
 	return FI_SUCCESS;
 }
 
-static int cxip_nic_get_rgroup_vni(struct cxip_if *nic_if,
-				   unsigned int *rgroup, unsigned int *vni)
+static int cxip_nic_get_rgroup_vni(struct cxip_if *nic_if, unsigned int *rgroup,
+				   unsigned int *vni)
 {
 	int ret;
 
@@ -301,8 +313,9 @@ static int cxip_nic_get_rgroup_vni(struct cxip_if *nic_if,
 
 	ret = cxip_nic_get_best_rgroup_vni(nic_if, rgroup, vni);
 	if (ret == -FI_ENOSYS) {
-		CXIP_WARN("Failed to find valid default rgroup and vni for %s\n",
-			  nic_if->info->device_name);
+		CXIP_WARN(
+			"Failed to find valid default rgroup and vni for %s\n",
+			nic_if->info->device_name);
 		*rgroup = 0;
 		*vni = 0;
 		ret = FI_SUCCESS;
@@ -332,9 +345,9 @@ static int cxip_nic_control(struct fid *fid, int command, void *arg)
 		if (ret != FI_SUCCESS)
 			return ret;
 
-		ret = cxip_nic_get_rgroup_vni(nic_if,
-					      (void *)&nic_attr->default_rgroup_id,
-					      (void *)&nic_attr->default_vni);
+		ret = cxip_nic_get_rgroup_vni(
+			nic_if, (void *) &nic_attr->default_rgroup_id,
+			(void *) &nic_attr->default_vni);
 
 		cxip_put_if(nic_if);
 
@@ -346,7 +359,8 @@ static int cxip_nic_control(struct fid *fid, int command, void *arg)
 		return ret;
 
 	if (command == FI_DUP) {
-		(*dup)->prov_attr = mem_dup(nic->prov_attr, sizeof(struct cxip_nic_attr));
+		(*dup)->prov_attr =
+			mem_dup(nic->prov_attr, sizeof(struct cxip_nic_attr));
 		if (!(*dup)->prov_attr) {
 			cxip_nic_close(&(*dup)->fid);
 			return -FI_ENOMEM;
@@ -388,12 +402,12 @@ int cxip_nic_alloc(struct cxip_if *nic_if, struct fid_nic **fid_nic)
 	nic->prov_attr = nic_attr;
 
 	ret = cxip_nic_get_rgroup_vni(nic_if,
-				      (void *)&nic_attr->default_rgroup_id,
-				      (void *)&nic_attr->default_vni);
+				      (void *) &nic_attr->default_rgroup_id,
+				      (void *) &nic_attr->default_vni);
 	if (ret != FI_SUCCESS)
 		goto err_free_nic;
 
-	memcpy((void *)&nic_attr->addr, &nic_if->info->nic_addr,
+	memcpy((void *) &nic_attr->addr, &nic_if->info->nic_addr,
 	       sizeof(nic_attr->addr));
 	nic_attr->version = FI_CXI_NIC_ATTR_VER;
 
@@ -436,8 +450,8 @@ int cxip_nic_alloc(struct cxip_if *nic_if, struct fid_nic **fid_nic)
 
 	nic->link_attr->mtu = nic_if->info->link_mtu;
 	/* Convert Mb/s to libfabric reported b/s */
-	nic->link_attr->speed = (size_t)nic_if->speed * 1000000;
-	nic->link_attr->state = nic_if->link ?  FI_LINK_UP : FI_LINK_DOWN;
+	nic->link_attr->speed = (size_t) nic_if->speed * 1000000;
+	nic->link_attr->state = nic_if->link ? FI_LINK_UP : FI_LINK_DOWN;
 	nic->link_attr->network_type = strdup("HPC Ethernet");
 
 	*fid_nic = nic;

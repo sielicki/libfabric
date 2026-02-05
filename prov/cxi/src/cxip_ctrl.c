@@ -520,6 +520,91 @@ err:
 }
 
 /*
+ * cxip_ctrl_writedata_pte_init() - Lazy init of writedata notification PTE.
+ *
+ * Allocates and enables the writedata notification PTE on first use (when
+ * the first MR with FI_RMA_EVENT is registered). This avoids the overhead
+ * of PTE allocation for endpoints that don't use fi_writedata().
+ *
+ * The PTE receives 0-length unrestricted PUTs that carry the immediate data
+ * (header_data) for fi_writedata() completions. Each MR with FI_RMA_EVENT
+ * will append its own LE to this PTE.
+ *
+ * Caller must hold ep_obj->lock.
+ */
+int cxip_ctrl_writedata_pte_init(struct cxip_ep_obj *ep_obj)
+{
+	struct cxi_pt_alloc_opts pt_opts = {
+		.use_long_event = 1,
+		.is_matching = 1,
+	};
+	const union c_event *event;
+	int ret;
+
+	/* Already initialized - nothing to do */
+	if (ep_obj->ctrl.writedata_pte)
+		return FI_SUCCESS;
+
+	ret = cxip_pte_alloc_nomap(ep_obj->ptable, ep_obj->ctrl.tgt_evtq,
+				   &pt_opts, NULL, NULL,
+				   &ep_obj->ctrl.writedata_pte);
+	if (ret != FI_SUCCESS) {
+		CXIP_WARN("Failed to allocate writedata notify PTE: %d\n", ret);
+		return ret;
+	}
+
+	ret = cxip_pte_map(ep_obj->ctrl.writedata_pte,
+			   CXIP_PTL_IDX_WRITEDATA_NOTIFY, false);
+	if (ret != FI_SUCCESS) {
+		CXIP_WARN("Failed to map writedata notify PTE: %d\n", ret);
+		goto free_pte;
+	}
+
+	ret = cxip_pte_set_state(ep_obj->ctrl.writedata_pte, ep_obj->ctrl.tgq,
+				 C_PTLTE_ENABLED, CXIP_PTE_IGNORE_DROPS);
+	if (ret) {
+		CXIP_WARN("Failed to enable writedata notify PTE: %d\n", ret);
+		goto free_pte;
+	}
+
+	/* Wait for writedata PTE enable event */
+	while (!(event = cxi_eq_get_event(ep_obj->ctrl.tgt_evtq)))
+		sched_yield();
+
+	switch (event->hdr.event_type) {
+	case C_EVENT_STATE_CHANGE:
+		if (event->tgt_long.return_code != C_RC_OK ||
+		    event->tgt_long.initiator.state_change.ptlte_state !=
+			    C_PTLTE_ENABLED ||
+		    event->tgt_long.ptlte_index !=
+			    ep_obj->ctrl.writedata_pte->pte->ptn) {
+			CXIP_WARN("Invalid writedata PTE enable event\n");
+			ret = -FI_EIO;
+			goto free_pte;
+		}
+		break;
+	case C_EVENT_COMMAND_FAILURE:
+		CXIP_WARN("Writedata PTE command failure\n");
+		ret = -FI_EIO;
+		goto free_pte;
+	default:
+		CXIP_WARN("Invalid event type: %d\n", event->hdr.event_type);
+		ret = -FI_EIO;
+		goto free_pte;
+	}
+
+	cxi_eq_ack_events(ep_obj->ctrl.tgt_evtq);
+
+	CXIP_DBG("Writedata notification PTE initialized (lazy)\n");
+	return FI_SUCCESS;
+
+free_pte:
+	cxip_pte_free(ep_obj->ctrl.writedata_pte);
+	ep_obj->ctrl.writedata_pte = NULL;
+	return ret;
+}
+
+/*
  * cxip_ep_ctrl_init() - Initialize endpoint control resources.
  *
  * Caller must hold ep_obj->lock.
@@ -635,6 +720,12 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 	if (ret != FI_SUCCESS)
 		goto free_pte;
 
+	/* Writedata notification PTE is lazily initialized in
+	 * cxip_ctrl_writedata_pte_init() when the first MR with
+	 * FI_RMA_EVENT is registered. This avoids overhead for
+	 * endpoints that don't use fi_writedata().
+	 */
+
 	/* Reserve 4 event queue slots to prevent EQ overrun.
 	 * 1. One slot for EQ status writeback
 	 * 2. One slot for default reserved_fc value
@@ -678,6 +769,11 @@ err:
 void cxip_ep_ctrl_fini(struct cxip_ep_obj *ep_obj)
 {
 	cxip_ctrl_mr_cache_flush(ep_obj);
+
+	/* Free writedata notification PTE before ctrl message PTE */
+	if (ep_obj->ctrl.writedata_pte)
+		cxip_pte_free(ep_obj->ctrl.writedata_pte);
+
 	cxip_ctrl_msg_fini(ep_obj);
 	cxip_pte_free(ep_obj->ctrl.pte);
 	cxip_ep_cmdq_put(ep_obj, false);

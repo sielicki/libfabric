@@ -1258,12 +1258,70 @@ static int cxip_ep_control(struct fid *fid, int command, void *arg)
 	return FI_SUCCESS;
 }
 
+/*
+ * EP Extension Operations for debugging/testing writedata statistics.
+ */
+static int cxip_ep_get_writedata_stats(struct fid *fid,
+				       struct fi_cxi_writedata_stats *stats)
+{
+	struct cxip_ep *ep;
+	struct cxip_txc *txc;
+
+	if (!fid || fid->fclass != FI_CLASS_EP)
+		return -FI_EINVAL;
+	if (!stats)
+		return -FI_EINVAL;
+
+	ep = container_of(fid, struct cxip_ep, ep.fid);
+	txc = ep->ep_obj->txc;
+
+	/* Copy stats - protected by ep_obj->lock in real usage */
+	stats->single_put_count = txc->writedata_stats.single_put_count;
+	stats->triggered_count = txc->writedata_stats.triggered_count;
+	stats->flush_count = txc->writedata_stats.flush_count;
+
+	return FI_SUCCESS;
+}
+
+static int cxip_ep_reset_writedata_stats(struct fid *fid)
+{
+	struct cxip_ep *ep;
+	struct cxip_txc *txc;
+
+	if (!fid || fid->fclass != FI_CLASS_EP)
+		return -FI_EINVAL;
+
+	ep = container_of(fid, struct cxip_ep, ep.fid);
+	txc = ep->ep_obj->txc;
+
+	/* Reset stats - protected by ep_obj->lock in real usage */
+	memset(&txc->writedata_stats, 0, sizeof(txc->writedata_stats));
+
+	return FI_SUCCESS;
+}
+
+static struct fi_cxi_ep_ops cxip_ep_ops_ext = {
+	.get_writedata_stats = cxip_ep_get_writedata_stats,
+	.reset_writedata_stats = cxip_ep_reset_writedata_stats,
+};
+
+static int cxip_ep_ops_open(struct fid *fid, const char *ops_name,
+			    uint64_t flags, void **ops, void *context)
+{
+	if (!strcmp(ops_name, FI_CXI_EP_OPS_1)) {
+		*ops = &cxip_ep_ops_ext;
+		return FI_SUCCESS;
+	}
+
+	return -FI_EINVAL;
+}
+
 struct fi_ops cxip_ep_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = cxip_ep_close,
 	.bind = cxip_ep_bind,
 	.control = cxip_ep_control,
-	.ops_open = fi_no_ops_open,
+	.ops_open = cxip_ep_ops_open,
 };
 
 int cxip_ep_getopt_priv(struct cxip_ep *ep, int level, int optname,

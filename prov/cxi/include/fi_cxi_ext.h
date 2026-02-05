@@ -253,6 +253,46 @@ static inline void *fi_cxi_get_cntr_reseterr_addr(void *cntr_mmio)
 #define FI_CXI_DOM_OPS_5 "dom_ops_v5"
 #define FI_CXI_DOM_OPS_6 "dom_ops_v6"
 
+/*
+ * CXI EP Operations - for endpoint-level debugging and statistics.
+ */
+#define FI_CXI_EP_OPS_1 "ep_ops_v1"
+
+/*
+ * Writedata mode statistics for debugging/testing.
+ * These counters are incremented each time fi_writedata() selects a
+ * particular protocol mode based on message size and MR type.
+ */
+struct fi_cxi_writedata_stats {
+	uint64_t single_put_count;  /* Small msgs (<= threshold) to std MRs */
+	uint64_t triggered_count;   /* Large msgs with HW CT sequencing */
+	uint64_t flush_count;       /* Large msgs with flush ordering */
+};
+
+struct fi_cxi_ep_ops {
+	/* Get writedata mode statistics.
+	 *
+	 * Returns the count of fi_writedata() operations that used each
+	 * protocol mode. Useful for testing and debugging to verify the
+	 * expected code path was taken.
+	 *
+	 * @ep: Endpoint FID
+	 * @stats: Output structure to receive statistics
+	 *
+	 * Return: FI_SUCCESS or -FI_ERRNO
+	 */
+	int (*get_writedata_stats)(struct fid *fid,
+				   struct fi_cxi_writedata_stats *stats);
+
+	/* Reset writedata mode statistics to zero.
+	 *
+	 * @ep: Endpoint FID
+	 *
+	 * Return: FI_SUCCESS or -FI_ERRNO
+	 */
+	int (*reset_writedata_stats)(struct fid *fid);
+};
+
 /* v1 to v6 can use the same struct since they only appended a routine */
 struct fi_cxi_dom_ops {
 	int (*cntr_read)(struct fid *fid, unsigned int cntr, uint64_t *value,

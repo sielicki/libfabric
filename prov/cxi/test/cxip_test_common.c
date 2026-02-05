@@ -7,10 +7,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <time.h>
-#include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <time.h>
+#include <unistd.h>
 
 #include <criterion/criterion.h>
 
@@ -27,11 +27,9 @@ struct cxip_addr cxit_ep_addr;
 fi_addr_t cxit_ep_fi_addr;
 struct fi_eq_attr cxit_eq_attr = {};
 struct fid_eq *cxit_eq;
-struct fi_cq_attr cxit_tx_cq_attr = {
-	.format = FI_CQ_FORMAT_TAGGED,
-	.size = 16384
-};
-struct fi_cq_attr cxit_rx_cq_attr = { .format = FI_CQ_FORMAT_TAGGED };
+struct fi_cq_attr cxit_tx_cq_attr = {.format = FI_CQ_FORMAT_TAGGED,
+				     .size = 16384};
+struct fi_cq_attr cxit_rx_cq_attr = {.format = FI_CQ_FORMAT_TAGGED};
 uint64_t cxit_eq_bind_flags = 0;
 uint64_t cxit_tx_cq_bind_flags = FI_TRANSMIT;
 uint64_t cxit_rx_cq_bind_flags = FI_RECV;
@@ -42,7 +40,7 @@ struct fid_cntr *cxit_read_cntr, *cxit_write_cntr;
 struct fid_cntr *cxit_rem_cntr;
 struct fi_av_attr cxit_av_attr;
 struct fid_av *cxit_av;
-struct cxit_coll_mc_list cxit_coll_mc_list = { .count = 5 };
+struct cxit_coll_mc_list cxit_coll_mc_list = {.count = 5};
 char *cxit_node, *cxit_service;
 uint64_t cxit_flags;
 int cxit_n_ifs;
@@ -59,8 +57,8 @@ static void cxit_set_page_size(void)
 		s_page_size = sysconf(_SC_PAGESIZE);
 }
 
-int cxit_dom_read_cntr(unsigned int cntr, uint64_t *value,
-		       struct timespec *ts, bool sync)
+int cxit_dom_read_cntr(unsigned int cntr, uint64_t *value, struct timespec *ts,
+		       bool sync)
 {
 	int ret;
 	struct timespec start;
@@ -87,10 +85,10 @@ done:
 }
 
 static ssize_t copy_from_hmem_iov(void *dest, size_t size,
-				 enum fi_hmem_iface iface, uint64_t device,
-				 const struct iovec *hmem_iov,
-				 size_t hmem_iov_count,
-				 uint64_t hmem_iov_offset)
+				  enum fi_hmem_iface iface, uint64_t device,
+				  const struct iovec *hmem_iov,
+				  size_t hmem_iov_count,
+				  uint64_t hmem_iov_offset)
 {
 	size_t cpy_size = MIN(size, hmem_iov->iov_len);
 
@@ -105,9 +103,8 @@ static ssize_t copy_from_hmem_iov(void *dest, size_t size,
 
 static ssize_t copy_to_hmem_iov(enum fi_hmem_iface iface, uint64_t device,
 				const struct iovec *hmem_iov,
-				size_t hmem_iov_count,
-				uint64_t hmem_iov_offset, const void *src,
-				size_t size)
+				size_t hmem_iov_count, uint64_t hmem_iov_offset,
+				const void *src, size_t size)
 {
 	size_t cpy_size = MIN(size, hmem_iov->iov_len);
 
@@ -182,33 +179,31 @@ void cxit_create_domain(void)
 
 	/* Should be able to open either v1 - v6 */
 	ret = fi_open_ops(&cxit_domain->fid, FI_CXI_DOM_OPS_1, 0,
-			  (void **)&dom_ops, NULL);
+			  (void **) &dom_ops, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_open_ops v1");
 	cr_assert(dom_ops->cntr_read != NULL, "v1 function returned");
 
 	ret = fi_open_ops(&cxit_domain->fid, FI_CXI_DOM_OPS_2, 0,
-			  (void **)&dom_ops, NULL);
+			  (void **) &dom_ops, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_open_ops v2");
-	cr_assert(dom_ops->cntr_read != NULL &&
-		  dom_ops->topology != NULL, "V2 functions returned");
+	cr_assert(dom_ops->cntr_read != NULL && dom_ops->topology != NULL,
+		  "V2 functions returned");
 
 	ret = fi_open_ops(&cxit_domain->fid, FI_CXI_DOM_OPS_3, 0,
-			  (void **)&dom_ops, NULL);
+			  (void **) &dom_ops, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_open_ops v3");
-	cr_assert(dom_ops->cntr_read != NULL &&
-		  dom_ops->topology != NULL &&
-		  dom_ops->enable_hybrid_mr_desc != NULL,
+	cr_assert(dom_ops->cntr_read != NULL && dom_ops->topology != NULL &&
+			  dom_ops->enable_hybrid_mr_desc != NULL,
 		  "V3 functions returned");
 
 	ret = fi_open_ops(&cxit_domain->fid, FI_CXI_DOM_OPS_6, 0,
-			  (void **)&dom_ops, NULL);
+			  (void **) &dom_ops, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_open_ops v6");
-	cr_assert(dom_ops->cntr_read != NULL &&
-		  dom_ops->topology != NULL &&
-		  dom_ops->enable_hybrid_mr_desc != NULL &&
-		  dom_ops->ep_get_unexp_msgs != NULL &&
-		  dom_ops->get_dwq_depth != NULL &&
-		  dom_ops->enable_mr_match_events != NULL,
+	cr_assert(dom_ops->cntr_read != NULL && dom_ops->topology != NULL &&
+			  dom_ops->enable_hybrid_mr_desc != NULL &&
+			  dom_ops->ep_get_unexp_msgs != NULL &&
+			  dom_ops->get_dwq_depth != NULL &&
+			  dom_ops->enable_mr_match_events != NULL,
 		  "V3 functions returned");
 
 	if (enable_cxi_hmem_ops) {
@@ -249,11 +244,9 @@ void cxit_destroy_ep(void)
 
 void cxit_create_eq(void)
 {
-	struct fi_eq_attr attr = {
-		.size = 32,
-		.flags = FI_WRITE,
-		.wait_obj = FI_WAIT_NONE
-	};
+	struct fi_eq_attr attr = {.size = 32,
+				  .flags = FI_WRITE,
+				  .wait_obj = FI_WAIT_NONE};
 	int ret;
 
 	ret = fi_eq_open(cxit_fabric, &attr, &cxit_eq, NULL);
@@ -263,11 +256,9 @@ void cxit_create_eq(void)
 
 void cxit_create_eq_yield(void)
 {
-	struct fi_eq_attr attr = {
-		.size = 32,
-		.flags = FI_WRITE,
-		.wait_obj = FI_WAIT_YIELD
-	};
+	struct fi_eq_attr attr = {.size = 32,
+				  .flags = FI_WRITE,
+				  .wait_obj = FI_WAIT_YIELD};
 	int ret;
 
 	ret = fi_eq_open(cxit_fabric, &attr, &cxit_eq, NULL);
@@ -340,20 +331,16 @@ void cxit_create_local_cntrs(void)
 {
 	int ret;
 
-	ret = fi_cntr_open(cxit_domain, NULL, &cxit_send_cntr,
-			   NULL);
+	ret = fi_cntr_open(cxit_domain, NULL, &cxit_send_cntr, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_cntr_open (send)");
 
-	ret = fi_cntr_open(cxit_domain, NULL, &cxit_recv_cntr,
-			   NULL);
+	ret = fi_cntr_open(cxit_domain, NULL, &cxit_recv_cntr, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_cntr_open (recv)");
 
-	ret = fi_cntr_open(cxit_domain, NULL, &cxit_read_cntr,
-			   NULL);
+	ret = fi_cntr_open(cxit_domain, NULL, &cxit_read_cntr, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_cntr_open (read)");
 
-	ret = fi_cntr_open(cxit_domain, NULL, &cxit_write_cntr,
-			   NULL);
+	ret = fi_cntr_open(cxit_domain, NULL, &cxit_write_cntr, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_cntr_open (write)");
 }
 
@@ -365,21 +352,17 @@ void cxit_create_local_byte_cntrs(void)
 	};
 	int ret;
 
-	ret = fi_cntr_open(cxit_domain, &attr, &cxit_send_cntr,
-			   NULL);
+	ret = fi_cntr_open(cxit_domain, &attr, &cxit_send_cntr, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_cntr_open (send)");
 
-	ret = fi_cntr_open(cxit_domain, &attr, &cxit_recv_cntr,
-			   NULL);
+	ret = fi_cntr_open(cxit_domain, &attr, &cxit_recv_cntr, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_cntr_open (recv)");
 
 	/* For now have read/write still use event counting */
-	ret = fi_cntr_open(cxit_domain, NULL, &cxit_read_cntr,
-			   NULL);
+	ret = fi_cntr_open(cxit_domain, NULL, &cxit_read_cntr, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_cntr_open (read)");
 
-	ret = fi_cntr_open(cxit_domain, NULL, &cxit_write_cntr,
-			   NULL);
+	ret = fi_cntr_open(cxit_domain, NULL, &cxit_write_cntr, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_cntr_open (write)");
 }
 
@@ -486,11 +469,10 @@ void cxit_init(void)
 
 	/* Force provider init */
 	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
-			 cxit_node, cxit_service, cxit_flags, hints,
-			 &info);
+			 cxit_node, cxit_service, cxit_flags, hints, &info);
 	cr_assert(ret == FI_SUCCESS);
 
-	slist_foreach(&cxip_if_list, entry, prev) {
+	slist_foreach (&cxip_if_list, entry, prev) {
 		cxit_n_ifs++;
 	}
 
@@ -701,8 +683,7 @@ void cxit_setup_enabled_ep_mr_events(void)
 	cxit_setup_ep();
 
 	/* Enable FI_CXI_MR_MATCH_EVENTS via domain */
-	ret = dom_ops->enable_mr_match_events(&cxit_domain->fid,
-					      true);
+	ret = dom_ops->enable_mr_match_events(&cxit_domain->fid, true);
 	cr_assert_eq(ret, FI_SUCCESS);
 
 	/* Disable RMA events to make sure MATCH_EVENTS on its own is
@@ -899,11 +880,11 @@ void cxit_setup_rma_disable_fi_rma_event(void)
 	cxit_setup_enabled_ep_disable_fi_rma_event();
 
 	/* Insert local address into AV to prepare to send to self */
-	ret = fi_av_insert(cxit_av, (void *)&fake_addr, 1, NULL, 0, NULL);
+	ret = fi_av_insert(cxit_av, (void *) &fake_addr, 1, NULL, 0, NULL);
 	cr_assert(ret == 1);
 
 	/* Insert local address into AV to prepare to send to self */
-	ret = fi_av_insert(cxit_av, (void *)&cxit_ep_addr, 1, &cxit_ep_fi_addr,
+	ret = fi_av_insert(cxit_av, (void *) &cxit_ep_addr, 1, &cxit_ep_fi_addr,
 			   0, NULL);
 	cr_assert(ret == 1);
 }
@@ -917,11 +898,11 @@ void cxit_setup_rma_mr_events(void)
 	cxit_setup_enabled_ep_mr_events();
 
 	/* Insert local address into AV to prepare to send to self */
-	ret = fi_av_insert(cxit_av, (void *)&fake_addr, 1, NULL, 0, NULL);
+	ret = fi_av_insert(cxit_av, (void *) &fake_addr, 1, NULL, 0, NULL);
 	cr_assert(ret == 1);
 
 	/* Insert local address into AV to prepare to send to self */
-	ret = fi_av_insert(cxit_av, (void *)&cxit_ep_addr, 1, &cxit_ep_fi_addr,
+	ret = fi_av_insert(cxit_av, (void *) &cxit_ep_addr, 1, &cxit_ep_fi_addr,
 			   0, NULL);
 	cr_assert(ret == 1);
 
@@ -937,12 +918,12 @@ void cxit_setup_rnr_msg_ep(void)
 	cxit_setup_enabled_rnr_msg_ep();
 
 	/* Insert local address into AV to prepare to send to self */
-	ret = fi_av_insert(cxit_av, (void *)&fake_addr, 1, NULL, 0, NULL);
+	ret = fi_av_insert(cxit_av, (void *) &fake_addr, 1, NULL, 0, NULL);
 	cr_assert(ret == 1);
 
 	/* Insert local address into AV to prepare to send to self */
-	ret = fi_av_insert(cxit_av, (void *)&cxit_ep_addr, 1, &cxit_ep_fi_addr,
-			  0, NULL);
+	ret = fi_av_insert(cxit_av, (void *) &cxit_ep_addr, 1, &cxit_ep_fi_addr,
+			   0, NULL);
 	cr_assert(ret == 1);
 }
 
@@ -970,11 +951,10 @@ void cxit_create_domain_hybrid_mr_desc(void)
 	cr_assert(ret == FI_SUCCESS, "fi_domain");
 
 	ret = fi_open_ops(&cxit_domain->fid, FI_CXI_DOM_OPS_3, 0,
-			  (void **)&dom_ops, NULL);
+			  (void **) &dom_ops, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_open_ops v2");
-	cr_assert(dom_ops->cntr_read != NULL &&
-		  dom_ops->topology != NULL &&
-		  dom_ops->enable_hybrid_mr_desc != NULL,
+	cr_assert(dom_ops->cntr_read != NULL && dom_ops->topology != NULL &&
+			  dom_ops->enable_hybrid_mr_desc != NULL,
 		  "V3 functions returned");
 
 	if (enable_cxi_hmem_ops) {
@@ -1044,11 +1024,11 @@ void cxit_setup_rma_hybrid_mr_desc(void)
 	cxit_setup_enabled_ep_hybrid_mr_desc();
 
 	/* Insert local address into AV to prepare to send to self */
-	ret = fi_av_insert(cxit_av, (void *)&fake_addr, 1, NULL, 0, NULL);
+	ret = fi_av_insert(cxit_av, (void *) &fake_addr, 1, NULL, 0, NULL);
 	cr_assert(ret == 1);
 
 	/* Insert local address into AV to prepare to send to self */
-	ret = fi_av_insert(cxit_av, (void *)&cxit_ep_addr, 1, &cxit_ep_fi_addr,
+	ret = fi_av_insert(cxit_av, (void *) &cxit_ep_addr, 1, &cxit_ep_fi_addr,
 			   0, NULL);
 	cr_assert(ret == 1);
 }
@@ -1068,8 +1048,8 @@ void cxit_setup_enabled_rnr_ep_hybrid_mr_desc(void)
 
 	/* Indicate we want to use the CS protocol */
 	cxit_fi_hints->ep_attr->protocol = FI_PROTO_CXI_RNR;
-	cxit_fi_hints->domain_attr->mr_mode = FI_MR_PROV_KEY | FI_MR_ALLOCATED |
-					      FI_MR_ENDPOINT;
+	cxit_fi_hints->domain_attr->mr_mode =
+		FI_MR_PROV_KEY | FI_MR_ALLOCATED | FI_MR_ENDPOINT;
 
 	cxit_setup_ep_hybrid_mr_desc();
 
@@ -1116,8 +1096,8 @@ void cxit_setup_enabled_rnr_ep_hybrid_mr_desc_byte_cntr(void)
 
 	/* Indicate we want to use the CS protocol */
 	cxit_fi_hints->ep_attr->protocol = FI_PROTO_CXI_RNR;
-	cxit_fi_hints->domain_attr->mr_mode = FI_MR_PROV_KEY | FI_MR_ALLOCATED |
-					      FI_MR_ENDPOINT;
+	cxit_fi_hints->domain_attr->mr_mode =
+		FI_MR_PROV_KEY | FI_MR_ALLOCATED | FI_MR_ENDPOINT;
 
 	cxit_setup_ep_hybrid_mr_desc();
 
@@ -1157,11 +1137,11 @@ void cxit_setup_rma_rnr_hybrid_mr_desc(void)
 	cxit_setup_enabled_rnr_ep_hybrid_mr_desc();
 
 	/* Insert local address into AV to prepare to send to self */
-	ret = fi_av_insert(cxit_av, (void *)&fake_addr, 1, NULL, 0, NULL);
+	ret = fi_av_insert(cxit_av, (void *) &fake_addr, 1, NULL, 0, NULL);
 	cr_assert(ret == 1);
 
 	/* Insert local address into AV to prepare to send to self */
-	ret = fi_av_insert(cxit_av, (void *)&cxit_ep_addr, 1, &cxit_ep_fi_addr,
+	ret = fi_av_insert(cxit_av, (void *) &cxit_ep_addr, 1, &cxit_ep_fi_addr,
 			   0, NULL);
 	cr_assert(ret == 1);
 }
@@ -1174,11 +1154,11 @@ void cxit_setup_rma_rnr_hybrid_mr_desc_byte_cntr(void)
 	cxit_setup_enabled_rnr_ep_hybrid_mr_desc_byte_cntr();
 
 	/* Insert local address into AV to prepare to send to self */
-	ret = fi_av_insert(cxit_av, (void *)&fake_addr, 1, NULL, 0, NULL);
+	ret = fi_av_insert(cxit_av, (void *) &fake_addr, 1, NULL, 0, NULL);
 	cr_assert(ret == 1);
 
 	/* Insert local address into AV to prepare to send to self */
-	ret = fi_av_insert(cxit_av, (void *)&cxit_ep_addr, 1, &cxit_ep_fi_addr,
+	ret = fi_av_insert(cxit_av, (void *) &cxit_ep_addr, 1, &cxit_ep_fi_addr,
 			   0, NULL);
 	cr_assert(ret == 1);
 }
@@ -1193,11 +1173,11 @@ void cxit_setup_rma(void)
 	cxit_setup_enabled_ep();
 
 	/* Insert local address into AV to prepare to send to self */
-	ret = fi_av_insert(cxit_av, (void *)&fake_addr, 1, NULL, 0, NULL);
+	ret = fi_av_insert(cxit_av, (void *) &fake_addr, 1, NULL, 0, NULL);
 	cr_assert(ret == 1);
 
 	/* Insert local address into AV to prepare to send to self */
-	ret = fi_av_insert(cxit_av, (void *)&cxit_ep_addr, 1, &cxit_ep_fi_addr,
+	ret = fi_av_insert(cxit_av, (void *) &cxit_ep_addr, 1, &cxit_ep_fi_addr,
 			   0, NULL);
 	cr_assert(ret == 1);
 }
@@ -1214,6 +1194,62 @@ void cxit_teardown_rma(void)
 	cxit_teardown_ep();
 }
 
+/*
+ * Writedata-specific setup. fi_writedata() requires provider keys
+ * (FI_MR_PROV_KEY) because the implementation checks the is_prov bit
+ * in the key to validate that the MR supports remote CQ data events.
+ *
+ * Additionally, SINGLE_PUT mode (used for small messages) requires
+ * standard (non-optimized) MRs because optimized MRs have
+ * EVENT_COMM_DISABLE set, which prevents header_data from generating
+ * PUT events at the target. We disable optimized MRs so that the
+ * test creates standard MRs suitable for SINGLE_PUT mode.
+ */
+void cxit_setup_writedata(void)
+{
+	/* Force provider key mode for writedata tests */
+	cxit_prov_key = 1;
+
+	/* Disable optimized MRs so we get standard MRs that support
+	 * SINGLE_PUT mode (header_data generates target PUT events).
+	 */
+	setenv("FI_CXI_OPTIMIZED_MRS", "0", 1);
+
+	/* Create hints with FI_MR_PROV_KEY */
+	cxit_fi_hints = cxit_allocinfo();
+	cxit_fi_hints->domain_attr->mr_mode |= FI_MR_PROV_KEY;
+
+	cxit_setup_rma();
+}
+
+void cxit_teardown_writedata(void)
+{
+	cxit_teardown_rma();
+	unsetenv("FI_CXI_OPTIMIZED_MRS");
+}
+
+/* Writedata fixture that allows optimized MRs.
+ * Used for tests that specifically verify optimized MR behavior.
+ */
+void cxit_setup_writedata_opt(void)
+{
+	/* Force provider key mode for writedata tests */
+	cxit_prov_key = 1;
+
+	/* Do NOT set FI_CXI_OPTIMIZED_MRS - allow default behavior */
+
+	/* Create hints with FI_MR_PROV_KEY */
+	cxit_fi_hints = cxit_allocinfo();
+	cxit_fi_hints->domain_attr->mr_mode |= FI_MR_PROV_KEY;
+
+	cxit_setup_rma();
+}
+
+void cxit_teardown_writedata_opt(void)
+{
+	cxit_teardown_rma();
+}
+
 /* Use FI_WAIT_FD CQ wait object */
 void cxit_setup_rma_fd(void)
 {
@@ -1223,11 +1259,11 @@ void cxit_setup_rma_fd(void)
 	cxit_setup_enabled_ep_fd();
 
 	/* Insert local address into AV to prepare to send to self */
-	ret = fi_av_insert(cxit_av, (void *)&fake_addr, 1, NULL, 0, NULL);
+	ret = fi_av_insert(cxit_av, (void *) &fake_addr, 1, NULL, 0, NULL);
 	cr_assert(ret == 1);
 
 	/* Insert local address into AV to prepare to send to self */
-	ret = fi_av_insert(cxit_av, (void *)&cxit_ep_addr, 1, &cxit_ep_fi_addr,
+	ret = fi_av_insert(cxit_av, (void *) &cxit_ep_addr, 1, &cxit_ep_fi_addr,
 			   0, NULL);
 	cr_assert(ret == 1);
 }
@@ -1246,8 +1282,8 @@ void set_amo_remap_to_pcie_fadd(int amo_remap_to_pcie_fadd)
 		  -errno);
 
 	ret = fprintf(fd, "%d", amo_remap_to_pcie_fadd);
-	cr_assert(ret >= 0,
-		  "Failed to write AMO remap value: errno=%d\n", -errno);
+	cr_assert(ret >= 0, "Failed to write AMO remap value: errno=%d\n",
+		  -errno);
 
 	fclose(fd);
 }
@@ -1268,11 +1304,11 @@ static void cxit_setup_tx_alias_rma_impl(bool delivery_complete)
 	cxit_setup_enabled_ep();
 
 	/* Insert local address into AV to prepare to send to self */
-	ret = fi_av_insert(cxit_av, (void *)&fake_addr, 1, NULL, 0, NULL);
+	ret = fi_av_insert(cxit_av, (void *) &fake_addr, 1, NULL, 0, NULL);
 	cr_assert(ret == 1);
 
 	/* Insert local address into AV to prepare to send to self */
-	ret = fi_av_insert(cxit_av, (void *)&cxit_ep_addr, 1, &cxit_ep_fi_addr,
+	ret = fi_av_insert(cxit_av, (void *) &cxit_ep_addr, 1, &cxit_ep_fi_addr,
 			   0, NULL);
 	cr_assert(ret == 1);
 
@@ -1286,8 +1322,8 @@ static void cxit_setup_tx_alias_rma_impl(bool delivery_complete)
 	ret = fi_ep_alias(cxit_ep, &cxit_tx_alias_ep, op_flags);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_alias");
 
-	cxi_alias_ep = container_of(&cxit_tx_alias_ep->fid,
-				    struct cxip_ep, ep.fid);
+	cxi_alias_ep =
+		container_of(&cxit_tx_alias_ep->fid, struct cxip_ep, ep.fid);
 	cr_assert_not_null(cxi_alias_ep->ep_obj);
 }
 
@@ -1353,8 +1389,8 @@ void validate_rx_event(struct fi_cq_tagged_entry *cqe, void *context,
 	cr_assert(cqe->op_context == context, "CQE Context mismatch");
 	cr_assert(cqe->len == len, "Invalid CQE length");
 	cr_assert(cqe->flags == flags, "CQE flags mismatch");
-	cr_assert(cqe->buf == buf, "Invalid CQE address (%p %p)",
-		  cqe->buf, buf);
+	cr_assert(cqe->buf == buf, "Invalid CQE address (%p %p)", cqe->buf,
+		  buf);
 	cr_assert(cqe->data == data, "Invalid CQE data");
 	cr_assert(cqe->tag == tag, "Invalid CQE tag");
 }
@@ -1364,18 +1400,18 @@ void validate_rx_event_mask(struct fi_cq_tagged_entry *cqe, void *context,
 			    uint64_t data, uint64_t tag, uint64_t ignore)
 {
 	cr_assert(cqe->op_context == context, "CQE Context mismatch");
-	cr_assert(cqe->len == len, "Invalid CQE length: (%lu %lu)",
-		  cqe->len, len);
+	cr_assert(cqe->len == len, "Invalid CQE length: (%lu %lu)", cqe->len,
+		  len);
 	cr_assert(cqe->flags == flags, "CQE flags mismatch");
-	cr_assert(cqe->buf == buf, "Invalid CQE address (%p %p)",
-		  cqe->buf, buf);
+	cr_assert(cqe->buf == buf, "Invalid CQE address (%p %p)", cqe->buf,
+		  buf);
 	cr_assert(cqe->data == data, "Invalid CQE data");
 	cr_assert(((cqe->tag & ~ignore) == (tag & ~ignore)), "Invalid CQE tag");
 }
 
-void validate_multi_recv_rx_event(struct fi_cq_tagged_entry *cqe, void
-				  *context, size_t len, uint64_t flags,
-				  uint64_t data, uint64_t tag)
+void validate_multi_recv_rx_event(struct fi_cq_tagged_entry *cqe, void *context,
+				  size_t len, uint64_t flags, uint64_t data,
+				  uint64_t tag)
 {
 	cr_assert(cqe->op_context == context, "CQE Context mismatch");
 	cr_assert(cqe->len == len, "Invalid CQE length");
@@ -1428,8 +1464,95 @@ int mr_create(size_t len, uint64_t access, uint8_t seed, uint64_t *key,
 	return mr_create_ext(len, access, seed, key, cxit_rem_cntr, mr);
 }
 
+/*
+ * Extended MR creation with explicit flags parameter.
+ *
+ * This allows passing flags like FI_RMA_EVENT to fi_mr_reg() to enable
+ * MR-specific event handling (needed for writedata).
+ */
+int mr_create_ext_flags(size_t len, uint64_t access, uint8_t seed,
+			uint64_t *key, struct fid_cntr *cntr, uint64_t flags,
+			struct mem_region *mr)
+{
+	int ret;
+
+	cr_assert_not_null(mr);
+
+	if (len) {
+		mr->mem = calloc(1, len);
+		cr_assert_not_null(mr->mem, "Error allocating memory window");
+	} else {
+		mr->mem = 0;
+	}
+
+	for (size_t i = 0; i < len; i++)
+		mr->mem[i] = i + seed;
+
+	ret = fi_mr_reg(cxit_domain, mr->mem, len, access, 0, *key, flags,
+			&mr->mr, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_reg failed %d", ret);
+	ret = fi_mr_bind(mr->mr, &cxit_ep->fid, 0);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_bind(ep) failed %d", ret);
+
+	if (cxit_fi->caps & FI_RMA_EVENT && cntr) {
+		ret = fi_mr_bind(mr->mr, &cntr->fid, FI_REMOTE_WRITE);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_mr_bind(cntr) failed %d",
+			     ret);
+	}
+
+	ret = fi_mr_enable(mr->mr);
+	if (!ret)
+		*key = fi_mr_key(mr->mr);
+
+	return ret;
+}
+
+/*
+ * MR creation for writedata tests.
+ *
+ * Creates an MR with FI_RMA_EVENT flag which sets the 'events' bit in
+ * the provider key. This is required for fi_writedata() which validates
+ * that the target MR supports RMA events.
+ */
+int mr_create_writedata(size_t len, uint64_t access, uint8_t seed,
+			uint64_t *key, struct mem_region *mr)
+{
+	return mr_create_ext_flags(len, access, seed, key, cxit_rem_cntr,
+				   FI_RMA_EVENT, mr);
+}
+
 void mr_destroy(struct mem_region *mr)
 {
 	fi_close(&mr->mr->fid);
 	free(mr->mem);
+}
+
+/*
+ * Writedata stats helpers - get/reset mode selection statistics.
+ */
+int cxit_get_writedata_stats(struct fid_ep *ep,
+			     struct fi_cxi_writedata_stats *stats)
+{
+	struct fi_cxi_ep_ops *ep_ops;
+	int ret;
+
+	ret = fi_open_ops(&ep->fid, FI_CXI_EP_OPS_1, 0, (void **) &ep_ops,
+			  NULL);
+	if (ret)
+		return ret;
+
+	return ep_ops->get_writedata_stats(&ep->fid, stats);
+}
+
+int cxit_reset_writedata_stats(struct fid_ep *ep)
+{
+	struct fi_cxi_ep_ops *ep_ops;
+	int ret;
+
+	ret = fi_open_ops(&ep->fid, FI_CXI_EP_OPS_1, 0, (void **) &ep_ops,
+			  NULL);
+	if (ret)
+		return ret;
+
+	return ep_ops->reset_writedata_stats(&ep->fid);
 }

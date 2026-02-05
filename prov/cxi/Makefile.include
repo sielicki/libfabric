@@ -131,6 +131,16 @@ prov_cxi_test_multinode_test_barrier_CPPFLAGS = \
 prov_cxi_test_multinode_test_barrier_LDFLAGS = $(cxi_test_ldflags)
 prov_cxi_test_multinode_test_barrier_LDADD = $(cxi_test_ldadd) $(PTHREAD_LIBS)
 
+noinst_PROGRAMS += prov/cxi/test/multinode/test_writedata
+prov_cxi_test_multinode_test_writedata_SOURCES = \
+	prov/cxi/test/multinode/multinode_frmwk.h \
+	prov/cxi/test/multinode/multinode_frmwk.c \
+	prov/cxi/test/multinode/test_writedata.c
+prov_cxi_test_multinode_test_writedata_CPPFLAGS = \
+	$(AM_CPPFLAGS) $(cxi_CPPFLAGS) $(PTHREAD_FLAGS)
+prov_cxi_test_multinode_test_writedata_LDFLAGS = $(cxi_test_ldflags)
+prov_cxi_test_multinode_test_writedata_LDADD = $(cxi_test_ldadd) $(PTHREAD_LIBS)
+
 if HAVE_CRITERION
 
 # curltest is not expected to exist outside devel env
@@ -168,7 +178,8 @@ nodist_prov_cxi_test_cxitest_SOURCES = \
 	prov/cxi/test/fork.c \
 	prov/cxi/test/mem_reg.c \
 	prov/cxi/test/nic.c \
-	prov/cxi/test/mr_cache.c
+	prov/cxi/test/mr_cache.c \
+	prov/cxi/test/writedata.c
 
 prov_cxi_test_cxitest_CPPFLAGS = $(AM_CPPFLAGS) $(cxi_CPPFLAGS) \
 	$(cxitest_CPPFLAGS) $(PTHREAD_CFLAGS)
