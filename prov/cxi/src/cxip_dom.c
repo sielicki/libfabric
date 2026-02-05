@@ -389,8 +389,12 @@ int cxip_domain_prov_mr_id_alloc(struct cxip_domain *dom,
 	 */
 	key.events = mr->count_events || mr->rma_events || mr->cntr;
 
+	/* Optimized MRs use EVENT_COMM_DISABLE which suppresses PUT events.
+	 * MRs that require events (counter/RMA events) cannot use optimized
+	 * mode since they need those PUT events for completion notification.
+	 */
 	key.opt = dom->optimized_mrs &&
-			key.id < CXIP_PTL_IDX_PROV_MR_OPT_CNT;
+			key.id < CXIP_PTL_IDX_PROV_MR_OPT_CNT && !key.events;
 	mr->key = key.raw;
 	ofi_spin_unlock(&dom->ctrl_id_lock);
 
