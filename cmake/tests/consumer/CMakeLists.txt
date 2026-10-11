@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only
+cmake_minimum_required(VERSION 3.21)
+project(libfabric_consumer LANGUAGES ${CONSUMER_LANGUAGE})
+find_package(Libfabric CONFIG REQUIRED)
+if(CONSUMER_LANGUAGE STREQUAL "CXX")
+  configure_file(main.c main.cpp COPYONLY)
+  add_executable(consumer "${CMAKE_CURRENT_BINARY_DIR}/main.cpp")
+else()
+  add_executable(consumer main.c)
+endif()
+target_link_libraries(consumer PRIVATE Libfabric::fabric)
+enable_testing()
+add_test(NAME consume COMMAND consumer)
+
+if(WIN32 AND DEFINED CONSUMER_RUNTIME_DIR)
+  # Windows does not have an RPATH. Locate the relocated installation's DLL.
+  set(_path "${CONSUMER_RUNTIME_DIR};$ENV{PATH}")
+  string(REPLACE ";" "\\;" _path "${_path}")
+  set_tests_properties(consume PROPERTIES ENVIRONMENT "PATH=${_path}")
+endif()

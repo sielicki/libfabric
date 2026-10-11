@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only
+format:
+  line_width: 80
+  tab_size: 2
+  dangle_parens: true
+  command_case: lower
+  keyword_case: upper
+parse:
+  additional_commands:
+    libfabric_add_provider:
+      flags: [LINUX_ONLY, FREEBSD_ONLY, MACOS_ONLY, X86_64_ONLY, AARCH64_ONLY]
+      kwargs:
+        NAME: 1
+        SOURCES: '+'
+        HEADERS: '+'
+        INCLUDE_DIRS: '+'
+        COMPILE_DEFINITIONS: '+'
+        COMPILE_OPTIONS: '+'
+        LINK_LIBRARIES: '+'
+        DEPENDS: '+'
+        CONDITION: '+'
+    libfabric_add_hook_provider:
+      flags: [LINUX_ONLY]
+      kwargs:
+        NAME: 1
+        SOURCES: '+'
+        INCLUDE_DIRS: '+'
+        CONDITION: '+'
